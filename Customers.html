@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Customers · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="customers" data-title="Customers">
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+      <!-- Header -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 class="text-xl font-bold text-slate-800">Customers</h2><p id="count" class="text-sm text-slate-500"></p></div>
+        <button id="addBtn" class="btn-primary text-sm !py-2">+ Add customer</button>
+      </div>
+      <!-- Filter bar -->
+      <div class="card p-3 space-y-2.5">
+        <div class="flex flex-col md:flex-row gap-2.5">
+          <input id="q" type="search" placeholder="Search by name, mobile or email" class="flex-1 px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none">
+          <select id="fSource" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white md:w-44"><option value="">All lead sources</option></select>
+          <select id="fGender" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white md:w-40"><option value="">All genders</option><option>Female</option><option>Male</option><option>Other</option></select>
+        </div>
+        <div id="chips" class="flex flex-wrap gap-1.5"></div>
+      </div>
+      <!-- Table -->
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead><tr>
+              <th>Customer</th><th>Mobile</th><th>Email</th><th>Status</th><th>Lead source</th><th>Last visit</th><th class="ta-r">Total spend</th><th class="ta-r">Actions</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 text-sm text-slate-500"><span id="pageInfo"></span><div id="pager" class="flex gap-1"></div></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Full profile (centered overlay) -->
+  <div id="dw" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+    <div id="dwBg" class="absolute inset-0 bg-slate-900/40"></div>
+    <aside class="relative w-full max-w-3xl max-h-[90vh] bg-slate-50 rounded-xl overflow-y-auto shadow-2xl">
+      <div class="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between"><h3 class="font-semibold text-slate-800">Customer profile</h3><button id="dwClose" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="dwBody" class="p-4 space-y-4"></div>
+    </aside>
+  </div>
+
+  <!-- Reusable overlay form -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 p-5 shadow-xl w-full">
+      <div class="flex items-center justify-between mb-3"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <p id="ovNote" class="text-sm text-slate-600 mb-3 hidden"></p>
+      <div id="ovFields" class="grid sm:grid-cols-2 gap-3 text-sm"></div>
+      <div class="flex justify-end gap-2 mt-5"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;
+    const $=id=>document.getElementById(id), PER=10;
+    const SOURCES=['Google','Instagram','Facebook','WhatsApp','Referral','Walk-in','Website','Justdial'];
+    const badge=s=>`<span class="badge badge-${s.toLowerCase()}">${s}</span>`;
+    let status='All', page=1, openId=null, tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2400)};
+    const saveExtras=()=>sessionStorage.setItem('crmExtraCustomers',JSON.stringify(customers.filter(c=>c.id>1000)));
+    const byId=id=>customers.find(c=>c.id===id);
+
+    // ---------- Icon buttons ----------
+    const ico=p=>`<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg>`;
+    const P={view:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 100-6 3 3 0 000 6z',edit:'M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z',del:'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6'};
+    const iconBtn=(act,label,hover)=>`<button data-act="${act}" title="${label}" aria-label="${label}" class="p-1.5 rounded-lg text-slate-500 transition ${hover}">${ico(P[act])}</button>`;
+
+    // ---------- Generic overlay form ----------
+    const fld=(k,l,t='text',o,r,full)=>({k,l,t,o,r,full});
+    let ovSave=null, ovFields=[];
+    function formModal({title,fields=[],values={},submit='Save',danger=false,note='',wide=true,html='',cancelText='Cancel',onCancel,onSave}){
+      ovFields=fields; ovSave=onSave;
+      $('ovTitle').textContent=title; $('ovForm').style.maxWidth=wide?'42rem':'28rem';
+      $('ovCancel').textContent=cancelText; $('ovCancel').onclick=()=>{closeOv();onCancel&&onCancel()};
+      $('ovNote').textContent=note; $('ovNote').classList.toggle('hidden',!note);
+      const cls='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white';
+      $('ovFields').innerHTML=html?`<div class="sm:col-span-2">${html}</div>`:fields.map(f=>`<div class="${f.full?'sm:col-span-2':''}"><label class="font-medium text-slate-700" for="o_${f.k}">${f.l}${f.r?' *':''}</label>`+
+        (f.t==='select'?`<select id="o_${f.k}" class="${cls}"><option value="">Select…</option>${f.o.map(v=>`<option>${esc(v)}</option>`).join('')}</select>`
+         :f.t==='textarea'?`<textarea id="o_${f.k}" rows="3" class="${cls}"></textarea>`:`<input id="o_${f.k}" type="${f.t}" class="${cls}">`)+
+        `<p id="oe_${f.k}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`).join('');
+      fields.forEach(f=>{const v=values[f.k];$('o_'+f.k).value=(v&&v!=='—')?v:''});
+      $('ovSubmit').textContent=submit; $('ovSubmit').className=(danger?'bg-rose-600 hover:bg-rose-700 text-white rounded-[.625rem] px-4 py-2 font-semibold':'btn-primary')+' text-sm';
+      $('ov').classList.remove('hidden'); (fields[0]?$('o_'+fields[0].k):$('ovSubmit')).focus();
+    }
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=closeOv;
+    $('ovForm').onsubmit=e=>{
+      e.preventDefault(); const v={},err={};
+      ovFields.forEach(f=>v[f.k]=$('o_'+f.k).value.trim());
+      ovFields.forEach(f=>{
+        if(f.r&&!v[f.k])err[f.k]=f.t==='select'?'Choose an option.':'This field is required.';
+        else if(f.k==='mobile'&&v.mobile&&!/^[6-9]\d{9}$/.test(v.mobile))err.mobile='Enter a 10-digit Indian mobile number.';
+        else if(f.t==='email'&&v[f.k]&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v[f.k]))err[f.k]='Enter a valid email address.';
+      });
+      ovFields.forEach(f=>{const el=$('oe_'+f.k);el.textContent=err[f.k]||'';el.classList.toggle('hidden',!err[f.k])});
+      if(Object.keys(err).length)return;
+      closeOv(); ovSave&&ovSave(v);
+    };
+
+    // ---------- Customer table ----------
+    $('fSource').insertAdjacentHTML('beforeend',SOURCES.map(s=>`<option>${s}</option>`).join(''));
+    $('chips').innerHTML=['All','New','Active','VIP','Inactive','Lost'].map(s=>`<button data-s="${s}" class="chip px-3 py-0.5 rounded-full text-xs font-medium border transition"></button>`).join('');
+    function filtered(){
+      const q=$('q').value.trim().toLowerCase(),src=$('fSource').value,g=$('fGender').value;
+      return customers.filter(c=>(status==='All'||c.status===status)&&(!src||c.source===src)&&(!g||c.gender===g)&&(!q||[c.name,c.mobile,c.email].some(v=>String(v).toLowerCase().includes(q))));
+    }
+    function render(){
+      const list=filtered(),pages=Math.max(1,Math.ceil(list.length/PER)); page=Math.min(page,pages);
+      document.querySelectorAll('.chip').forEach(b=>{const on=b.dataset.s===status;
+        b.textContent=b.dataset.s+(b.dataset.s==='All'?'':' ('+customers.filter(c=>c.status===b.dataset.s).length+')');
+        b.className='chip px-3 py-0.5 rounded-full text-xs font-medium border transition '+(on?'bg-teal-600 border-teal-600 text-white':'border-slate-300 text-slate-600 hover:bg-slate-50')});
+      $('rows').innerHTML=list.slice((page-1)*PER,page*PER).map(c=>`<tr class="cursor-pointer" data-id="${c.id}">
+        <td><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-full ${avatarColor(c.name)} text-white grid place-items-center text-[11px] font-semibold shrink-0">${esc(initialsOf(c.name))}</div><span class="font-medium text-slate-800">${esc(c.name)}</span></div></td>
+        <td>${esc(c.mobile)}</td><td class="text-slate-500">${esc(c.email||'—')}</td><td>${badge(c.status)}</td><td>${esc(c.source)}</td>
+        <td>${fmtDate(c.lastVisit)}</td><td class="ta-r font-semibold text-slate-800">${fmtINR(c.spend)}</td>
+        <td class="ta-r">${iconBtn('view','View profile','hover:bg-teal-50 hover:text-teal-700')}${iconBtn('edit','Edit customer','hover:bg-slate-100 hover:text-slate-800')}${iconBtn('del','Delete customer','hover:bg-rose-50 hover:text-rose-600')}</td></tr>`).join('')
+        ||'<tr><td colspan="8" class="!py-8 text-center text-slate-500">No customers match these filters. Clear the search or pick "All".</td></tr>';
+      $('count').textContent=`${customers.length} customers in total`;
+      $('pageInfo').textContent=list.length?`Showing ${(page-1)*PER+1}–${Math.min(page*PER,list.length)} of ${list.length}`:'0 results';
+      $('pager').innerHTML=pages<2?'':Array.from({length:pages},(_,i)=>`<button data-p="${i+1}" class="w-7 h-7 rounded-lg text-sm transition ${i+1===page?'bg-teal-600 text-white':'hover:bg-slate-100'}">${i+1}</button>`).join('');
+    }
+    $('q').oninput=$('fSource').onchange=$('fGender').onchange=()=>{page=1;render()};
+    $('chips').onclick=e=>{const b=e.target.closest('.chip');if(b){status=b.dataset.s;page=1;render()}};
+    $('pager').onclick=e=>{const b=e.target.closest('[data-p]');if(b){page=+b.dataset.p;render()}};
+    $('rows').onclick=e=>{
+      const tr=e.target.closest('tr[data-id]'); if(!tr)return; const id=+tr.dataset.id, act=(e.target.closest('[data-act]')||{dataset:{}}).dataset.act;
+      if(act==='edit')editCustomer(id); else if(act==='del')deleteCustomer(id); else viewCustomer(id);
+    };
+
+    // ---------- View (read-only overlay with OK button) ----------
+    function viewCustomer(id){
+      const c=byId(id);
+      formModal({title:'Customer details',submit:'OK',cancelText:'Open full profile',onCancel:()=>openProfile(id),
+        html:`<div class="flex items-center gap-3 mb-4"><div class="w-12 h-12 rounded-full ${avatarColor(c.name)} text-white grid place-items-center font-semibold shrink-0">${esc(initialsOf(c.name))}</div>
+          <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><p class="font-semibold text-slate-800">${esc(c.name)}</p>${badge(c.status)}</div><p class="text-sm text-slate-500 truncate">${esc(c.mobile)} · ${esc(c.email||'No email')}</p></div></div>
+          <dl class="grid sm:grid-cols-2 gap-3 rounded-lg bg-slate-50 border border-slate-100 p-3">${row('Gender',c.gender)}${row('Date of birth',fmtDate(c.dob))}${row('Anniversary',fmtDate(c.anniversary))}${row('Lead source',c.source)}${row('Address',c.address)}${row('Customer since',fmtDate(c.since))}${row('Total visits',String(c.visits))}${row('Total spend',fmtINR(c.spend))}${row('Last visit',fmtDate(c.lastVisit))}${row('Loyalty points',c.points.toLocaleString('en-IN'))}${row('Preferred service',c.prefService)}${row('Preferred therapist',c.prefTherapist)}</dl>`});
+    }
+
+    // ---------- Add / edit / delete ----------
+    const CF=[fld('name','Full name','text',0,1),fld('mobile','Mobile','tel',0,1),fld('email','Email','email'),fld('dob','Date of birth','date'),fld('gender','Gender','select',['Female','Male','Other'],1),fld('anniversary','Anniversary','date'),
+      fld('address','Address','text',0,0,1),fld('source','Lead source','select',SOURCES,1),fld('prefService','Preferred service','select',services.map(s=>s.name)),fld('prefTherapist','Preferred therapist','select',therapists),
+      fld('prefTime','Preferred time','select',['Morning','Afternoon','Evening']),fld('status','Status','select',['New','Active','VIP','Inactive','Lost'],1)];
+    function addCustomer(){formModal({title:'Add customer',fields:CF,values:{status:'New'},submit:'Save customer',onSave(v){
+      v.anniversary=v.anniversary||'—'; const id=1001+customers.filter(c=>c.id>1000).length;
+      customers.unshift(enrichCustomer(Object.assign({id,lastVisit:'—',spend:0,visits:0,points:0,since:new Date().toISOString().slice(0,10)},v)));
+      saveExtras();page=1;render();toast('Customer added')}})}
+    function editCustomer(id){formModal({title:'Edit customer',fields:CF,values:byId(id),submit:'Save changes',onSave(v){
+      v.anniversary=v.anniversary||'—';Object.assign(byId(id),v);saveExtras();render();if(openId===id)openProfile(id);toast('Customer updated')}})}
+    function deleteCustomer(id){const c=byId(id);formModal({title:'Delete customer',note:`Delete ${c.name}? This can't be undone in this session.`,submit:'Delete',danger:true,wide:false,onSave(){
+      customers.splice(customers.indexOf(c),1);saveExtras();if(openId===id)closeProfile();render();toast('Customer deleted')}})}
+    $('addBtn').onclick=addCustomer;
+
+    // ---------- Profile drawer ----------
+    const stat=(l,v)=>`<div class="card p-3"><p class="text-xs text-slate-500">${l}</p><p class="text-lg font-bold text-slate-800 mt-0.5 truncate">${v}</p></div>`;
+    const empty=t=>`<p class="py-6 text-center text-sm text-slate-500">${t}</p>`;
+    const row=(l,v)=>`<div><dt class="text-xs text-slate-500">${l}</dt><dd class="text-sm font-medium text-slate-800 mt-0.5">${esc(v||'—')}</dd></div>`;
+    // tables bleed to the card edges so they line up with the card border
+    const table=(h,rows)=>`<div class="overflow-x-auto -mx-4 -mb-4 border-t border-slate-100"><table class="data-table"><thead><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const stars=n=>'★'.repeat(n)+'<span class="text-slate-300">'+'★'.repeat(5-n)+'</span>';
+    const outBtn='px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 transition';
+    const TABS=['Details','Visits','Preferences','Memberships','Payments','Feedback'];
+    let curTab='Details';
+    function tabsFor(c){
+      const visits=Array.from({length:Math.min(c.visits,8)},(_,i)=>{const s=services[(c.id+i*3)%10];return{date:new Date(2026,9,5-i*(9+c.id%5)).toISOString().slice(0,10),service:s.name,therapist:therapists[(c.id+i)%3],amount:s.price}});
+      const mems=memberships.filter(m=>m.customer===c.name).map(m=>{const total=[8,12,20][m.id%3];return{...m,total,used:(m.id*3+c.id)%total}});
+      const invs=invoices.filter(i=>i.customer===c.name), fbs=feedback.filter(f=>f.customer===c.name);
+      return {
+        Details:`<dl class="grid sm:grid-cols-2 gap-4">${row('Full name',c.name)}${row('Mobile',c.mobile)}${row('Email',c.email)}${row('Gender',c.gender)}${row('Date of birth',fmtDate(c.dob))}${row('Anniversary',fmtDate(c.anniversary))}${row('Address',c.address)}${row('Lead source',c.source)}${row('Customer since',fmtDate(c.since))}</dl>`,
+        Visits:visits.length?table(['Date','Service','Therapist','Amount'],visits.map(v=>[fmtDate(v.date),v.service,v.therapist,fmtINR(v.amount)])):empty('No visits yet. Book the first appointment to start the history.'),
+        Preferences:`<dl class="grid sm:grid-cols-2 gap-4">${row('Preferred service',c.prefService)}${row('Preferred therapist',c.prefTherapist)}${row('Preferred time',c.prefTime)}${row('Favourite products',(c.prefProducts||[]).join(', '))}</dl>`,
+        Memberships:mems.length?`<div class="grid sm:grid-cols-2 gap-3">${mems.map(m=>`<div class="border border-slate-200 rounded-lg p-3"><div class="flex justify-between items-center"><p class="font-semibold text-sm text-slate-800">${m.plan} membership</p>${badge(m.status==='Active'?'Active':'Inactive')}</div><p class="text-xs text-slate-500 mt-1">${fmtDate(m.start)} to ${fmtDate(m.expiry)} · wallet ${fmtINR(m.balance)}</p><div class="mt-2 h-1.5 rounded-full bg-slate-100"><div class="h-1.5 rounded-full bg-teal-600" style="width:${m.used/m.total*100}%"></div></div><p class="text-xs text-slate-500 mt-1">${m.used} of ${m.total} sessions used</p></div>`).join('')}</div>`:empty('No active memberships or packages for this customer.'),
+        Payments:invs.length?table(['Invoice','Date','Amount','Mode','Status'],invs.map(i=>[i.id,fmtDate(i.date),fmtINR(i.amount+i.gst),i.mode,`<span class="badge ${i.status==='Paid'?'badge-active':'badge-vip'}">${i.status}</span>`])):empty('No invoices yet.'),
+        Feedback:fbs.length?`<ul class="divide-y divide-slate-100 -my-2">${fbs.map(f=>`<li class="py-2.5"><div class="flex justify-between"><p class="text-sm font-medium text-slate-800">${esc(f.service)}</p><span class="text-amber-400">${stars(f.rating)}</span></div><p class="text-sm text-slate-600 mt-1">${esc(f.comment)}</p><p class="text-xs text-slate-400 mt-1">${fmtDate(f.date)}</p></li>`).join('')}</ul>`:empty('No feedback received from this customer yet.')};
+    }
+    function showTab(t){curTab=t;const c=byId(openId);
+      document.querySelectorAll('.tab').forEach(b=>{const on=b.dataset.t===t;b.className='tab px-3.5 py-2.5 text-sm whitespace-nowrap border-b-2 transition '+(on?'border-teal-600 text-teal-700 font-semibold':'border-transparent text-slate-500 hover:text-slate-700')});
+      $('tabBody').innerHTML=tabsFor(c)[t];}
+    function openProfile(id){
+      openId=id; const c=byId(id);
+      $('dwBody').innerHTML=`
+       <section class="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+         <div class="w-14 h-14 rounded-full ${avatarColor(c.name)} text-white grid place-items-center text-lg font-semibold shrink-0">${esc(initialsOf(c.name))}</div>
+         <div class="flex-1 min-w-0"><div class="flex flex-wrap items-center gap-2"><h2 class="text-lg font-bold text-slate-800">${esc(c.name)}</h2>${badge(c.status)}</div>
+           <p class="text-sm text-slate-500 mt-0.5">${esc(c.mobile)} · ${esc(c.email||'No email')}</p>
+           <p class="text-xs text-slate-500 mt-0.5">Born ${fmtDate(c.dob)} · Anniversary ${fmtDate(c.anniversary)} · Customer since ${fmtDate(c.since)} · via ${esc(c.source)}</p></div>
+       </section>
+       <div class="flex flex-wrap gap-2"><button data-pa="book" class="btn-primary text-sm !py-1.5">Book appointment</button><button data-pa="wa" class="${outBtn}">Send WhatsApp</button><button data-pa="offer" class="${outBtn}">Send offer</button><button data-pa="edit" class="${outBtn}">Edit</button></div>
+       <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">${stat('Total visits',c.visits)}${stat('Total spend',fmtINR(c.spend))}${stat('Last visit',fmtDate(c.lastVisit))}${stat('Loyalty points',c.points.toLocaleString('en-IN'))}</section>
+       <section class="card overflow-hidden"><div id="tabBar" class="flex overflow-x-auto border-b border-slate-100 px-2" role="tablist">${TABS.map(t=>`<button role="tab" data-t="${t}" class="tab">${t}</button>`).join('')}</div><div id="tabBody" class="p-4"></div></section>`;
+      $('dw').classList.remove('hidden'); showTab(curTab);
+    }
+    function closeProfile(){$('dw').classList.add('hidden');openId=null}
+    $('dwClose').onclick=$('dwBg').onclick=closeProfile;
+    $('dwBody').onclick=e=>{
+      const t=e.target.closest('.tab'); if(t)return showTab(t.dataset.t);
+      const a=e.target.closest('[data-pa]'); if(!a)return; const c=byId(openId);
+      if(a.dataset.pa==='edit')editCustomer(c.id);
+      if(a.dataset.pa==='book')formModal({title:'Book appointment for '+c.name,submit:'Book appointment',values:{service:c.prefService,staff:c.prefTherapist},
+        fields:[fld('service','Service','select',services.map(s=>s.name),1),fld('staff','Therapist','select',therapists,1),fld('date','Date','date',0,1),
+          fld('time','Time','select',Array.from({length:19},(_,i)=>`${10+(i>>1)}:${i%2?'30':'00'}`),1),fld('notes','Notes','textarea',0,0,1)],
+        onSave(v){appointments.push({id:appointments.length+1,customer:c.name,service:v.service,staff:v.staff,date:v.date,time:v.time,status:'Booked'});toast('Appointment booked for '+fmtDate(v.date)+' at '+v.time)}});
+      if(a.dataset.pa==='wa')formModal({title:'Send WhatsApp to '+c.name,submit:'Open WhatsApp',wide:false,values:{msg:`Hi ${c.name.split(' ')[0]}, thank you for visiting Serenity Spa & Salon. `},
+        fields:[fld('msg','Message','textarea',0,1,1)],onSave(v){window.open(`https://wa.me/91${c.mobile}?text=${encodeURIComponent(v.msg)}`,'_blank','noopener')}});
+      if(a.dataset.pa==='offer')formModal({title:'Send offer to '+c.name,submit:'Send offer',wide:false,values:{channel:'WhatsApp'},
+        fields:[fld('offer','Offer','select',['15% off Signature Facial','Free Hair Spa on your next visit','Birthday spa treat','₹500 off any package'],1,1),fld('channel','Send via','select',['WhatsApp','SMS','Email'],1,1),fld('msg','Message (optional)','textarea',0,0,1)],
+        onSave(v){toast(`${v.offer} sent to ${c.name} via ${v.channel}`)}});
+    };
+    document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(!$('ov').classList.contains('hidden'))closeOv();else if(!$('dw').classList.contains('hidden'))closeProfile()});
+
+    render();
+    const qid=+new URLSearchParams(location.search).get('id'); if(qid&&byId(qid))openProfile(qid); // deep link: customers.html?id=3
+  })();
+  </script>
+</body>
+</html>

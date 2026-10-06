@@ -1,0 +1,66 @@
+/* Serenity CRM – small custom styles (Tailwind handles the rest) */
+body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;color:#1e293b;-webkit-font-smoothing:antialiased}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+
+/* ---------- Status badges ---------- */
+.badge{display:inline-flex;align-items:center;gap:.375rem;padding:.125rem .5rem;border-radius:9999px;font-size:.75rem;font-weight:600;white-space:nowrap}
+.badge::before{content:"";width:.375rem;height:.375rem;border-radius:9999px;background:currentColor;opacity:.7}
+.badge-new{background:#dbeafe;color:#1d4ed8}
+.badge-active{background:#d1fae5;color:#047857}
+.badge-vip{background:#fef3c7;color:#b45309}
+.badge-inactive{background:#e2e8f0;color:#475569}
+.badge-lost{background:#fee2e2;color:#b91c1c}
+
+/* ---------- Cards ---------- */
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:.75rem;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:box-shadow .2s ease,border-color .2s ease,transform .2s ease}
+.card-hover:hover{border-color:#5eead4;box-shadow:0 8px 20px -6px rgba(13,148,136,.18);transform:translateY(-1px)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid #f1f5f9}
+.card-title{font-size:.875rem;font-weight:600;color:#0f172a}
+.card-sub{font-size:.75rem;color:#64748b;margin-top:0}
+.card-link{font-size:.8125rem;font-weight:600;color:#0f766e;white-space:nowrap}
+.card-link:hover{color:#115e59;text-decoration:underline}
+
+/* ---------- Buttons ---------- */
+.btn-primary{background:#0d9488;color:#fff;border-radius:.625rem;padding:.5rem 1rem;font-weight:600;transition:background .15s}
+.btn-primary:hover{background:#0f766e}
+.btn-ghost{border:1px solid #e2e8f0;border-radius:.5rem;padding:.3rem .75rem;font-size:.75rem;font-weight:600;color:#475569;transition:all .15s}
+.btn-ghost:hover{background:#f8fafc;border-color:#cbd5e1}
+.btn-danger-ghost{border:1px solid #fecdd3;border-radius:.5rem;padding:.3rem .75rem;font-size:.75rem;font-weight:600;color:#e11d48;transition:background .15s}
+.btn-danger-ghost:hover{background:#fff1f2}
+
+/* ---------- Tables ---------- */
+.data-table{width:100%;font-size:.8125rem;border-collapse:collapse}
+.data-table thead th{background:#f8fafc;color:#64748b;font-size:.75rem;font-weight:600;text-align:left;letter-spacing:.02em;padding:.5rem 1rem;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.data-table tbody td{padding:.55rem 1rem;border-bottom:1px solid #f1f5f9;color:#334155;vertical-align:middle;white-space:nowrap}
+.data-table tbody tr:last-child td{border-bottom:0}
+.data-table tbody tr{transition:background .12s}
+.data-table tbody tr:hover{background:#f0fdfa}
+
+/* ---------- Avatars ---------- */
+.avatar{width:1.875rem;height:1.875rem;border-radius:9999px;display:grid;place-items:center;font-size:.6875rem;font-weight:700;background:#ccfbf1;color:#0f766e;flex-shrink:0}
+
+/* ---------- Layout shell + collapsible sidebar ---------- */
+.app-shell{min-height:100vh;display:flex;flex-direction:column}
+#sb{width:16rem;transition:width .2s ease,transform .2s ease}
+.nav-link-active{background:#ccfbf1;color:#0f766e;font-weight:600}
+.nav-item{transition:background .15s,color .15s}
+
+@media (min-width:1024px){
+  .app-shell{padding-left:16rem;transition:padding-left .2s ease}
+  body.sb-collapsed .app-shell{padding-left:4.5rem}
+  body.sb-collapsed #sb{width:4.5rem}
+  body.sb-collapsed .sb-label{display:none}
+  body.sb-collapsed .nav-item{justify-content:center;padding-left:0;padding-right:0}
+  body.sb-collapsed .sb-brand{justify-content:center;padding-left:0;padding-right:0}
+}
+
+:focus-visible{outline:2px solid #0d9488;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* Right-aligned table columns (header + cells) */
+.data-table .ta-r{text-align:right}
+.data-table .ta-c{text-align:center}

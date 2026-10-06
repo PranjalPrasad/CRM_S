@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leads & Follow-ups · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="leads" data-title="Leads & Follow-ups">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Top stats -->
+      <section id="summary" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></section>
+
+      <!-- Lead source performance chart -->
+      <section class="card card-hover p-4"><div class="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 class="font-semibold text-slate-800 text-sm">Lead source performance</h3><span class="text-xs text-slate-400">Leads vs converted, by source</span></div>
+        <div class="h-44"><canvas id="srcChart"></canvas></div></section>
+
+      <!-- Filters -->
+      <div class="card p-3 flex flex-wrap items-end gap-3 text-sm">
+        <label class="text-slate-500 text-xs font-medium">Source<select id="fSrc" class="block mt-1 min-w-[9rem] px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none"></select></label>
+        <label class="text-slate-500 text-xs font-medium">Staff<select id="fStaff" class="block mt-1 min-w-[9rem] px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none"></select></label>
+        <label class="text-slate-500 text-xs font-medium">From<input id="fFrom" type="date" class="block mt-1 px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-800 focus:border-teal-600 focus:outline-none"></label>
+        <label class="text-slate-500 text-xs font-medium">To<input id="fTo" type="date" class="block mt-1 px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-800 focus:border-teal-600 focus:outline-none"></label>
+        <button id="fClear" class="px-3.5 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition">Clear</button>
+        <p class="text-xs text-slate-400 w-full lg:w-auto lg:ml-auto">Date range: lead created date / follow-up due date</p>
+      </div>
+
+      <!-- Tabs + actions -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="tabs" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
+          <button data-t="leads" class="px-4 py-1 rounded-lg">Leads</button><button data-t="follow" class="px-4 py-1 rounded-lg">Follow-ups</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <div id="views" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm"><button data-v="kanban" class="px-4 py-1 rounded-lg">Kanban</button><button data-v="list" class="px-4 py-1 rounded-lg">List</button></div>
+          <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+        </div>
+      </div>
+
+      <!-- LEADS: kanban + list -->
+      <section id="t_leads">
+        <div id="kanban" class="flex gap-3 overflow-x-auto pb-3"></div>
+        <div id="list" class="card overflow-hidden hidden"><div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Lead</th><th>Mobile</th><th>Source</th><th>Interested in</th><th>Staff</th><th>Next follow-up</th><th>Created</th><th>Stage</th></tr></thead>
+          <tbody id="listRows"></tbody></table></div>
+          <div id="pg_list" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+
+      <!-- FOLLOW-UPS -->
+      <section id="t_follow" class="card overflow-hidden hidden"><div class="overflow-x-auto"><table class="data-table">
+        <thead><tr><th>Due</th><th>Lead</th><th>Reason</th><th>Staff</th><th>Status</th><th>Remarks</th><th class="ta-r">Actions</th></tr></thead>
+        <tbody id="fuRows"></tbody></table></div>
+        <div id="pg_follow" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></section>
+    </main>
+  </div>
+
+  <!-- Reusable overlay (Add Lead / Add Follow-up / Reschedule / Remark) -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full max-w-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="text-sm p-5"></div>
+      <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <!-- Compatibility + seed data: adds stages, sources, staff, dates and follow-up details if data.js lacks them -->
+  <script>
+  (function(){
+    const has=n=>{try{return (0,eval)('typeof '+n)!=='undefined'}catch(e){return false}};
+    const def=(n,v)=>{if(!has(n))window[n]=v};
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    def('addDaysISO',(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))});
+    def('esc',s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+    def('fmtDate',d=>d&&d!=='—'?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—');
+    def('services',[]);def('leads',[]);def('followups',[]);def('kpis',{});
+    window.staffNames=has('staff')?staff.map(s=>s.name||s[0]):['Anjali Desai','Rajesh Khanna','Sunita Pillai'];
+    const T=addDaysISO(new Date().toISOString().slice(0,10),0);
+    const SRC=['Google','Instagram','Facebook','WhatsApp','Referral','Walk-in','Website','Justdial','Ads','Instagram'];
+    leads.forEach((l,i)=>{
+      if(l.created)return;
+      l.stage=l.stage==='New'?'New Lead':l.stage; if(i===7)l.stage='Appointment Booked';
+      l.source=SRC[i%SRC.length];l.email=String(l.name).toLowerCase().replace(/\s+/g,'.')+'@example.in';
+      l.staff=staffNames[i%staffNames.length];l.created=addDaysISO(T,-(i*3+1));l.notes=l.notes||'Prefers weekend slots';
+    });
+    if(!followups.length||followups.some(f=>f.leadId==null)){
+      const off=[-3,0,0,1,2,-1,3,5,0,-5],done=[0,0,1,0,0,0,0,0,1,0],why=['Share offer and confirm slot','Call back about package price','Confirm appointment','Send WhatsApp brochure','Follow up after trial session','Discuss bridal package'];
+      followups.length=0;
+      leads.forEach((l,i)=>followups.push({id:i+1,leadId:l.id,lead:l.name,dueDate:addDaysISO(T,off[i%10]),mode:['Call','WhatsApp','Visit'][i%3],note:why[i%6],reason:why[i%6],staff:l.staff,done:!!done[i%10],remarks:i%3===0?[{date:addDaysISO(T,-2),text:'Asked to call after 6 PM'}]:[]}));
+    }
+  })();
+  </script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;           // layout.js redirects to login
+    const $=id=>document.getElementById(id);
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0);
+    const STAGES=['New Lead','Contacted','Interested','Appointment Booked','Converted','Lost'];
+    const DOT={'New Lead':'bg-sky-500',Contacted:'bg-violet-500',Interested:'bg-amber-500','Appointment Booked':'bg-teal-500',Converted:'bg-emerald-600',Lost:'bg-rose-500'};
+    const SRC={Google:'bg-blue-100 text-blue-700',Instagram:'bg-pink-100 text-pink-700',Facebook:'bg-indigo-100 text-indigo-700',WhatsApp:'bg-green-100 text-green-700',Referral:'bg-violet-100 text-violet-700','Walk-in':'bg-slate-200 text-slate-700',Website:'bg-teal-100 text-teal-700',Justdial:'bg-orange-100 text-orange-700',Ads:'bg-amber-100 text-amber-800'};
+    let tab='leads',view='kanban',dragId=null,chart,tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
+    const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
+    const L=id=>leads.find(l=>l.id==id);
+    const fuStatus=f=>f.done?'Done':f.dueDate<TODAY?'Overdue':'Pending';
+    const FB={Pending:'badge-new',Done:'badge-active',Overdue:'badge-lost'};
+    const nextFu=l=>followups.filter(f=>f.leadId==l.id&&!f.done).map(f=>f.dueDate).sort()[0];
+    const srcTag=s=>`<span class="badge ${SRC[s]||'bg-slate-100 text-slate-600'}">${esc(s)}</span>`;
+
+    // ---------- Filters (source, staff, date range) ----------
+    $('fSrc').innerHTML='<option value="">All sources</option>'+Object.keys(SRC).map(s=>`<option>${s}</option>`).join('');
+    $('fStaff').innerHTML='<option value="">All staff</option>'+staffNames.map(s=>`<option>${esc(s)}</option>`).join('');
+    const flt=()=>({s:$('fSrc').value,t:$('fStaff').value,a:$('fFrom').value,b:$('fTo').value});
+    const leadsF=()=>{const f=flt();return leads.filter(l=>(!f.s||l.source===f.s)&&(!f.t||l.staff===f.t)&&(!f.a||l.created>=f.a)&&(!f.b||l.created<=f.b))};
+    const fuF=()=>{const f=flt();return followups.filter(x=>{const l=L(x.leadId);return(!f.s||(l&&l.source===f.s))&&(!f.t||x.staff===f.t)&&(!f.a||x.dueDate>=f.a)&&(!f.b||x.dueDate<=f.b)})};
+    ['fSrc','fStaff','fFrom','fTo'].forEach(i=>$(i).onchange=()=>{resetPages();render()});
+    $('fClear').onclick=()=>{['fSrc','fStaff','fFrom','fTo'].forEach(i=>$(i).value='');resetPages();render()};
+
+    // ---------- Overlay + form helpers ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white text-sm';
+    const G='grid sm:grid-cols-2 gap-3';
+    const F=(id,l,c)=>`<div><label class="font-medium text-slate-700 text-sm" for="${id}">${l}</label>${c}<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`;
+    const I=(id,t='text',x='')=>`<input id="${id}" type="${t}" ${x} class="${inp}">`;
+    const SEL=(id,o)=>`<select id="${id}" class="${inp}">${o.map(v=>Array.isArray(v)?`<option value="${v[0]}">${esc(v[1])}</option>`:`<option>${esc(v)}</option>`).join('')}</select>`;
+    const val=id=>$(id).value.trim(),bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    let ovSubmit=null;
+    function modal(title,submit,html,fn){$('ovTitle').textContent=title;$('ovSubmit').textContent=submit;$('ovBody').innerHTML=html;ovSubmit=fn;$('ov').classList.remove('hidden');const f=$('ovBody').querySelector('input,select,textarea');if(f)f.focus()}
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ov').addEventListener('mousedown',e=>{if(e.target===$('ov'))closeOv()});
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+
+    // ---------- Pagination (List + Follow-ups; always visible, per-table page size) ----------
+    const pg={list:1,follow:1},size={list:5,follow:5};
+    function paged(key,arr){
+      const n=arr.length,sz=size[key],pages=Math.max(1,Math.ceil(n/sz));
+      pg[key]=Math.min(Math.max(1,pg[key]),pages);
+      const c=pg[key],s=(c-1)*sz,e=Math.min(s+sz,n);
+      const b=(l,p,on,dis,t)=>`<button type="button" data-pg="${key}:${p}" ${dis?'disabled':''} title="${t||'Page '+p}" class="min-w-[2rem] h-8 px-2.5 rounded-lg border text-xs transition ${on?'bg-teal-600 text-white border-teal-600 font-semibold':'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'} ${dis?'opacity-40 cursor-not-allowed hover:bg-white':''}">${l}</button>`;
+      const st=Math.max(1,Math.min(c-2,pages-4)),en=Math.min(pages,st+4);
+      let nums='';for(let i=st;i<=en;i++)nums+=b(i,i,i===c);
+      $('pg_'+key).innerHTML=`<div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div class="flex flex-wrap items-center gap-4"><span>${n?`Showing <b class="text-slate-700">${s+1}–${e}</b> of <b class="text-slate-700">${n}</b>`:'No records'}</span>
+          <label class="flex items-center gap-1.5">Rows per page <select data-ps="${key}" class="px-2 py-1 rounded-lg border border-slate-300 bg-white text-xs">${[5,10,20,50].map(v=>`<option ${v===sz?'selected':''}>${v}</option>`).join('')}</select></label></div>
+        <div class="flex items-center gap-1">${b('«',1,false,c===1,'First page')}${b('‹',c-1,false,c===1,'Previous page')}${nums}${b('›',c+1,false,c===pages,'Next page')}${b('»',pages,false,c===pages,'Last page')}</div></div>`;
+      return arr.slice(s,e);
+    }
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(!b||b.disabled)return;const[k,p]=b.dataset.pg.split(':');pg[k]=+p;render()});
+    document.addEventListener('change',e=>{const t=e.target.closest&&e.target.closest('[data-ps]');if(!t)return;size[t.dataset.ps]=+t.value;pg[t.dataset.ps]=1;render()});
+    const resetPages=()=>{pg.list=1;pg.follow=1};
+
+    // ---------- Render ----------
+    function render(){
+      const ls=leadsF(),fs=fuF(),conv=ls.filter(l=>l.stage==='Converted').length;
+      const card=(l,v,sub,c='text-slate-800')=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold ${c} mt-0.5">${v}</p><p class="text-xs text-slate-400 mt-0.5">${sub}</p></div>`;
+      $('summary').innerHTML=card('Total Leads',ls.length,ls.filter(l=>l.stage==='New Lead').length+' new')+card('Conversion Rate',(ls.length?(conv/ls.length*100).toFixed(1):0)+'%',conv+' converted','text-emerald-600')+
+        card('Follow-ups Due Today',fs.filter(f=>!f.done&&f.dueDate===TODAY).length,'pending today','text-teal-700')+card('Overdue Follow-ups',fs.filter(f=>fuStatus(f)==='Overdue').length,'needs attention','text-rose-600');
+      kpis.pendingFollowups=followups.filter(f=>!f.done).length;
+      const on='bg-teal-600 text-white font-semibold shadow-sm',off='text-slate-600 hover:bg-slate-100';
+      document.querySelectorAll('#tabs button').forEach(b=>b.className='px-4 py-1 rounded-lg transition '+(b.dataset.t===tab?on:off));
+      document.querySelectorAll('#views button').forEach(b=>b.className='px-4 py-1 rounded-lg transition '+(b.dataset.v===view?on:off));
+      $('t_leads').classList.toggle('hidden',tab!=='leads');$('t_follow').classList.toggle('hidden',tab!=='follow');$('views').classList.toggle('hidden',tab!=='leads');
+      $('kanban').classList.toggle('hidden',view!=='kanban');$('list').classList.toggle('hidden',view!=='list');
+      $('addBtn').textContent=tab==='leads'?'+ Add Lead':'+ Add Follow-up';
+
+      // Kanban columns + draggable cards
+      $('kanban').innerHTML=STAGES.map(st=>{const items=ls.filter(l=>l.stage===st);
+        return `<div data-col="${st}" class="w-72 shrink-0 bg-slate-100/70 rounded-xl p-2.5 transition"><div class="flex items-center gap-2 px-1 pb-2.5"><span class="w-2.5 h-2.5 rounded-full ${DOT[st]}"></span><span class="font-semibold text-sm text-slate-700">${st}</span><span class="ml-auto text-xs bg-white rounded-full px-2 py-0.5 text-slate-500">${items.length}</span></div>
+        <div class="space-y-2.5 min-h-[7rem]">${items.map(l=>{const nf=nextFu(l),od=nf&&nf<TODAY;
+          return `<div draggable="true" data-id="${l.id}" class="bg-white rounded-lg border border-slate-200 p-3 shadow-sm cursor-grab active:cursor-grabbing text-sm transition duration-150 hover:shadow-md hover:-translate-y-0.5 hover:border-teal-300">
+            <div class="flex items-start justify-between gap-2"><p class="font-semibold text-slate-800">${esc(l.name)}</p>${srcTag(l.source)}</div>
+            <p class="text-slate-500 text-xs mt-1.5">📞 ${esc(l.mobile)}</p><p class="text-slate-700 mt-1.5">${esc(l.interest)}</p>
+            <p class="text-xs text-slate-500 mt-1.5">👤 ${esc(l.staff)}</p><p class="text-xs mt-1 ${od?'text-rose-600 font-semibold':'text-slate-500'}">⏰ ${nf?fmtDate(nf)+(od?' (overdue)':''):'No follow-up set'}</p>
+            <select data-mv="${l.id}" aria-label="Move ${esc(l.name)} to stage" class="mt-2.5 w-full text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-500 bg-white">${STAGES.map(s=>`<option ${s===l.stage?'selected':''}>${s}</option>`).join('')}</select></div>`}).join('')}</div></div>`}).join('');
+
+      // List view
+      $('listRows').innerHTML=paged('list',ls).map(l=>{const nf=nextFu(l);return `<tr><td><p class="font-medium text-slate-800">${esc(l.name)}</p><p class="text-xs text-slate-400">${esc(l.email||'')}</p></td><td>${esc(l.mobile)}</td><td>${srcTag(l.source)}</td><td>${esc(l.interest)}</td><td>${esc(l.staff)}</td>
+        <td class="whitespace-nowrap ${nf&&nf<TODAY?'text-rose-600 font-medium':''}">${nf?fmtDate(nf):'—'}</td><td class="whitespace-nowrap">${fmtDate(l.created)}</td>
+        <td><select data-mv="${l.id}" class="text-sm border border-slate-300 rounded-lg px-2 py-1 bg-white">${STAGES.map(s=>`<option ${s===l.stage?'selected':''}>${s}</option>`).join('')}</select></td></tr>`}).join('')||'<tr><td colspan="8" class="!py-8 text-center text-slate-400">No leads match the filters.</td></tr>';
+
+      // Follow-ups: overdue first, then by date
+      const rank=f=>({Overdue:0,Pending:1,Done:2}[fuStatus(f)]);
+      $('fuRows').innerHTML=paged('follow',[...fs].sort((a,b)=>rank(a)-rank(b)||a.dueDate.localeCompare(b.dueDate))).map(f=>{const s=fuStatus(f),last=f.remarks[f.remarks.length-1];
+        return `<tr class="${s==='Overdue'?'bg-rose-50/60 text-rose-800':s==='Done'?'text-slate-400':''}"><td class="whitespace-nowrap font-medium">${fmtDate(f.dueDate)}</td><td class="font-medium">${esc(f.lead)}</td><td>${esc(f.reason)}</td><td>${esc(f.staff)}</td>
+          <td><span class="badge ${FB[s]}">${s}</span></td><td class="max-w-[14rem] text-xs">${last?esc(last.text)+(f.remarks.length>1?` <span class="text-slate-400">(+${f.remarks.length-1})</span>`:''):'—'}</td>
+          <td class="ta-r whitespace-nowrap"><div class="inline-flex gap-1.5"><button data-fa="done" data-id="${f.id}" ${f.done?'disabled':''} class="text-xs px-2.5 py-1 rounded-lg bg-emerald-600 text-white transition ${f.done?'opacity-30 cursor-not-allowed':'hover:bg-emerald-700'}">Mark Done</button>
+            <button data-fa="resched" data-id="${f.id}" class="text-xs px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition">Reschedule</button><button data-fa="remark" data-id="${f.id}" class="text-xs px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition">Add Remark</button></div></td></tr>`}).join('')||'<tr><td colspan="7" class="!py-8 text-center text-slate-400">No follow-ups match the filters.</td></tr>';
+
+      // Chart: leads vs converted per source
+      if(typeof Chart!=='undefined'){const labels=Object.keys(SRC),d1=labels.map(s=>ls.filter(l=>l.source===s).length),d2=labels.map(s=>ls.filter(l=>l.source===s&&l.stage==='Converted').length);
+        if(!chart)chart=new Chart($('srcChart'),{type:'bar',data:{labels,datasets:[{label:'Leads',data:d1,backgroundColor:'#5eead4',borderRadius:4},{label:'Converted',data:d2,backgroundColor:'#0d9488',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{boxWidth:10}}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+        else{chart.data.datasets[0].data=d1;chart.data.datasets[1].data=d2;chart.update()}}
+    }
+
+    // ---------- Drag & drop (HTML5) + move select fallback for touch/keyboard ----------
+    function moveLead(id,stage){const l=L(id);if(!l||l.stage===stage)return;l.stage=stage;render();toast(`${l.name} moved to ${stage}`)}
+    const kb=$('kanban');
+    kb.addEventListener('dragstart',e=>{const c=e.target.closest('[data-id]');if(!c)return;dragId=c.dataset.id;c.classList.add('opacity-40');try{e.dataTransfer.setData('text/plain',dragId);e.dataTransfer.effectAllowed='move'}catch(x){}});
+    kb.addEventListener('dragend',()=>{dragId=null;render()});
+    kb.addEventListener('dragover',e=>{const col=e.target.closest('[data-col]');if(!col)return;e.preventDefault();kb.querySelectorAll('[data-col]').forEach(c=>{c.classList.toggle('ring-2',c===col);c.classList.toggle('ring-teal-400',c===col)})});
+    kb.addEventListener('dragleave',e=>{if(!e.relatedTarget||!kb.contains(e.relatedTarget))kb.querySelectorAll('[data-col]').forEach(c=>c.classList.remove('ring-2','ring-teal-400'))});
+    kb.addEventListener('drop',e=>{const col=e.target.closest('[data-col]');if(!col)return;e.preventDefault();const id=dragId;dragId=null;moveLead(id,col.dataset.col)});
+    document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.mv)moveLead(e.target.dataset.mv,e.target.value)});
+
+    // ---------- Tabs, views, add buttons ----------
+    $('tabs').onclick=e=>{const b=e.target.closest('[data-t]');if(b){tab=b.dataset.t;render()}};
+    $('views').onclick=e=>{const b=e.target.closest('[data-v]');if(b){view=b.dataset.v;render()}};
+    $('addBtn').onclick=()=>tab==='leads'?addLead():addFollowup();
+
+    function addLead(){
+      modal('Add lead','Add Lead',`<div class="${G}">${F('l_name','Name *',I('l_name'))}${F('l_mob','Mobile *',I('l_mob','tel','maxlength="10" placeholder="10-digit number"'))}${F('l_email','Email',I('l_email','email'))}${F('l_src','Source *',SEL('l_src',Object.keys(SRC)))}
+        ${F('l_svc','Interested service *',SEL('l_svc',services.map(s=>s.name)))}${F('l_staff','Assigned staff *',SEL('l_staff',staffNames))}<div class="sm:col-span-2">${F('l_notes','Notes',`<textarea id="l_notes" rows="2" class="${inp}"></textarea>`)}</div></div>`,()=>{
+        let ok=bad('l_name',val('l_name')?'':'Enter the name.');ok=bad('l_mob',/^\d{10}$/.test(val('l_mob'))?'':'Enter a valid 10-digit mobile number.')&&ok;
+        ok=bad('l_email',!val('l_email')||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val('l_email'))?'':'Enter a valid email.')&&ok;if(!ok)return false;
+        leads.push({id:nextId(leads),name:val('l_name'),mobile:val('l_mob'),email:val('l_email'),source:val('l_src'),interest:val('l_svc'),staff:val('l_staff'),notes:val('l_notes'),stage:'New Lead',created:TODAY});
+        render();toast(`${val('l_name')} added as a new lead`)});
+    }
+    function addFollowup(){
+      if(!leads.length){toast('Add a lead first');return}
+      modal('Add follow-up','Add Follow-up',`<div class="${G}">${F('f_lead','Lead *',SEL('f_lead',leads.map(l=>[l.id,l.name])))}${F('f_date','Follow-up date *',I('f_date','date'))}${F('f_staff','Assigned staff',SEL('f_staff',staffNames))}
+        <div class="sm:col-span-2">${F('f_why','Reason *',I('f_why','text','placeholder="e.g. Confirm appointment"'))}</div></div>`,()=>{
+        let ok=bad('f_date',val('f_date')?'':'Choose a date.');ok=bad('f_why',val('f_why')?'':'Enter the reason.')&&ok;if(!ok)return false;
+        const l=L(val('f_lead'));followups.push({id:nextId(followups),leadId:l.id,lead:l.name,dueDate:val('f_date'),mode:'Call',note:val('f_why'),reason:val('f_why'),staff:val('f_staff'),done:false,remarks:[]});
+        render();toast(`Follow-up scheduled for ${l.name}`)});
+      $('f_date').value=addDaysISO(TODAY,1);const sync=()=>{const l=L($('f_lead').value);if(l)$('f_staff').value=l.staff};$('f_lead').onchange=sync;sync();
+    }
+
+    // ---------- Follow-up actions ----------
+    $('fuRows').addEventListener('click',e=>{const b=e.target.closest('[data-fa]');if(!b||b.disabled)return;const f=followups.find(x=>x.id==b.dataset.id),a=b.dataset.fa;
+      if(a==='done'){f.done=true;render();toast(`Follow-up with ${f.lead} marked done`)}
+      else if(a==='resched'){modal(`Reschedule · ${f.lead}`,'Reschedule',F('r_date','New date',I('r_date','date')),()=>{if(!bad('r_date',val('r_date')?'':'Choose a date.'))return false;f.dueDate=val('r_date');f.done=false;render();toast(`Rescheduled to ${fmtDate(f.dueDate)}`)});$('r_date').value=f.dueDate<TODAY?TODAY:f.dueDate}
+      else modal(`Add remark · ${f.lead}`,'Save Remark',F('m_text','Remark',`<textarea id="m_text" rows="3" class="${inp}"></textarea>`),()=>{if(!bad('m_text',val('m_text')?'':'Write a remark.'))return false;f.remarks.push({date:TODAY,text:val('m_text')});render();toast('Remark added')});
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

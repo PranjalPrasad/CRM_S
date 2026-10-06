@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <style>
+    /* Toggle switch: <button role="switch" aria-checked="true|false" class="sw"> (state is driven by aria-checked) */
+    .sw{position:relative;width:2.75rem;height:1.5rem;border-radius:9999px;background:#cbd5e1;transition:background .15s;flex-shrink:0;cursor:pointer}
+    .sw::after{content:'';position:absolute;top:2px;left:2px;width:1.25rem;height:1.25rem;border-radius:9999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+    .sw[aria-checked="true"]{background:#0d9488}
+    .sw[aria-checked="true"]::after{transform:translateX(1.25rem)}
+    .sw:disabled{opacity:.5;cursor:not-allowed}
+  </style>
+</head>
+<body data-page="settings" data-title="Settings">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <div id="app-topbar"></div>
+
+    <main class="flex-1 p-4 lg:p-8">
+      <div class="flex flex-col lg:flex-row gap-6 items-start">
+
+        <!-- ===== Left vertical tab menu (becomes a horizontal scroller on small screens) ===== -->
+        <nav id="tabs" role="tablist" aria-orientation="vertical" aria-label="Settings sections"
+             class="w-full lg:w-60 shrink-0 card p-2 flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible lg:sticky lg:top-20"></nav>
+
+        <!-- ===== Panels (one per tab, filled by JS) ===== -->
+        <div class="flex-1 min-w-0 w-full">
+          <section id="p_profile"      role="tabpanel" class="space-y-5"></section>
+          <section id="p_users"        role="tabpanel" class="space-y-5 hidden"></section>
+          <section id="p_templates"    role="tabpanel" class="space-y-5 hidden"></section>
+          <section id="p_rules"        role="tabpanel" class="space-y-5 hidden"></section>
+          <section id="p_loyalty"      role="tabpanel" class="space-y-5 hidden"></section>
+          <section id="p_integrations" role="tabpanel" class="space-y-5 hidden"></section>
+          <section id="p_billing"      role="tabpanel" class="space-y-5 hidden"></section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Add / Edit user modal ===== -->
+  <div id="uOv" class="fixed inset-0 z-[60] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="uForm" novalidate class="bg-white rounded-2xl mx-auto my-8 p-6 shadow-xl w-full max-w-md" role="dialog" aria-modal="true" aria-labelledby="uTitle">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="uTitle" class="text-lg font-semibold text-slate-800">Add User</h3>
+        <button type="button" id="uX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button>
+      </div>
+      <div class="space-y-4 text-sm">
+        <label class="block text-slate-600">Full name *
+          <input id="u_name" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none text-slate-800" placeholder="e.g. Neha Kulkarni">
+          <span id="e_u_name" class="hidden text-xs text-rose-600"></span></label>
+        <label class="block text-slate-600">Email *
+          <input id="u_email" type="email" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none text-slate-800" placeholder="name@serenity.in">
+          <span id="e_u_email" class="hidden text-xs text-rose-600"></span></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-slate-600">Role *
+            <select id="u_role" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-teal-600 focus:outline-none text-slate-800">
+              <option>Admin</option><option>Manager</option><option selected>Receptionist</option><option>Therapist</option></select>
+            <span id="e_u_role" class="hidden text-xs text-rose-600"></span></label>
+          <label class="block text-slate-600">Status
+            <select id="u_status" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-teal-600 focus:outline-none text-slate-800">
+              <option>Active</option><option>Inactive</option></select>
+            <span id="e_u_status" class="hidden text-xs text-rose-600"></span></label>
+        </div>
+        <p id="uNote" class="text-xs text-slate-400">An invitation email with a set-password link will be sent (demo: no email is actually sent).</p>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button type="button" id="uCancel" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm">Cancel</button>
+        <button id="uSave" class="btn-primary text-sm">Add User</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===== Integration "Configure" modal (fields are generated per integration) ===== -->
+  <div id="iOv" class="fixed inset-0 z-[60] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="iForm" novalidate autocomplete="off" class="bg-white rounded-2xl mx-auto my-8 p-6 shadow-xl w-full max-w-lg" role="dialog" aria-modal="true" aria-labelledby="iTitle">
+      <div class="flex items-center justify-between mb-1">
+        <h3 id="iTitle" class="text-lg font-semibold text-slate-800"></h3>
+        <button type="button" id="iX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button>
+      </div>
+      <p id="iDesc" class="text-sm text-slate-500 mb-4"></p>
+      <div id="iBody" class="space-y-4"></div>
+      <p class="mt-4 text-xs text-slate-400">Demo only — use dummy values. Secret keys are never stored; only the last 4 characters are kept as a hint.</p>
+      <div class="flex flex-wrap justify-end gap-2 mt-5">
+        <button type="button" id="iDisc" class="hidden mr-auto px-3 py-2 rounded-lg text-sm text-rose-600 hover:bg-rose-50">Disconnect</button>
+        <button type="button" id="iCancel" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm">Cancel</button>
+        <button type="button" id="iTest" class="px-4 py-2 rounded-lg border border-teal-600 text-teal-700 text-sm">Test connection</button>
+        <button id="iSave" class="btn-primary text-sm"></button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg" role="status" aria-live="polite"></div>
+
+  <!-- Shared scripts: data.js (staff, esc, initialsOf, avatarColor, fmtINR …) then layout.js -->
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+
+  <script>
+  (function(){
+    /* ---------- Guards ---------- */
+    let user={};try{user=JSON.parse(localStorage.getItem('crmUser'))||{}}catch(e){}
+    if(!user.name)return;                                              // layout.js already redirects to login
+    // Settings link is hidden for these roles; also block direct URL access
+    if(['Therapist','Receptionist'].includes(user.role)){location.replace('dashboard.html');return}
+
+    const $=id=>document.getElementById(id);
+    const clone=o=>JSON.parse(JSON.stringify(o));
+    const EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let tt;const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),3000)};
+
+    /* =========================================================
+       DEFAULTS + PERSISTENCE (localStorage key "crmSettings")
+       ========================================================= */
+    const KEY='crmSettings';
+    const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const ROLES=['Admin','Manager','Receptionist','Therapist'];
+    // Modules = same keys as the sidebar in layout.js
+    const MODULES=[['dashboard','Dashboard'],['customers','Customers'],['appointments','Appointments'],['services','Services & Packages'],['billing','Billing & Payments'],['memberships','Memberships'],
+                   ['inventory','Inventory'],['leads','Leads & Follow-ups'],['campaigns','Marketing & Campaigns'],['feedback','Feedback & Reviews'],['staff','Staff'],['reports','Reports'],['settings','Settings']];
+    const ALLM=MODULES.map(m=>m[0]);
+
+    const TPL=[
+      {id:'birthday',name:'Birthday wish',desc:'Sent before a customer\'s birthday together with a special offer.',vars:['name','offer','expiry_date','business','link'],channel:'WhatsApp',
+       text:`Happy Birthday, {name}! 🎂 Treat yourself this month — enjoy {offer} at {business}. Valid till {expiry_date}. Book now: {link}`},
+      {id:'anniversary',name:'Anniversary wish',desc:'Sent around a customer\'s anniversary with a couple/gift offer.',vars:['name','offer','expiry_date','business','link'],channel:'WhatsApp',
+       text:`Happy Anniversary, {name}! 💞 Celebrate with a relaxing day at {business} — {offer}, valid till {expiry_date}. Book: {link}`},
+      {id:'reminder',name:'Appointment reminder',desc:'Reminds the customer about an upcoming booking.',vars:['name','service','date','time','staff','business'],channel:'WhatsApp',
+       text:`Hi {name}, a reminder for your {service} on {date} at {time} with {staff} at {business}. Reply YES to confirm or call us to reschedule.`},
+      {id:'feedback',name:'Feedback request',desc:'Asks for a rating after the service is completed.',vars:['name','service','business','link'],channel:'SMS',
+       text:`Hi {name}, thank you for visiting {business}! How was your {service}? Rate us in 30 seconds: {link}`},
+      {id:'membership',name:'Membership expiry',desc:'Warns before a membership or package expires.',vars:['name','package','sessions_left','expiry_date','link'],channel:'WhatsApp',
+       text:`Hi {name}, your {package} expires on {expiry_date} with {sessions_left} session(s) left. Book your slots or renew here: {link}`},
+      {id:'reactivation',name:'Inactive reactivation',desc:'Win-back message for customers who haven\'t visited for a while.',vars:['name','days','offer','business','link'],channel:'SMS',
+       text:`Hi {name}, we miss you at {business}! It has been {days} days since your last visit. Come back and enjoy {offer}: {link}`}
+    ];
+    const SAMPLE={name:'Priya',service:'Swedish Massage',date:'12 Oct 2026',time:'4:30 PM',staff:'Deepak',offer:'20% off on any facial',expiry_date:'31 Oct 2026',package:'Relax & Rejuvenate',sessions_left:'3',days:'45',link:'serenity.in/book',business:'Serenity'};
+    const VARDESC={name:'Customer first name',service:'Service booked',date:'Appointment date',time:'Appointment time',staff:'Therapist name',offer:'Offer text',expiry_date:'Offer / membership expiry',package:'Package name',sessions_left:'Sessions remaining',days:'Days since last visit',link:'Booking / review link',business:'Business name'};
+
+    const RULES=[
+      {id:'reminder',name:'Appointment reminder',desc:'Remind customers before their booking.',unit:'hours before the appointment',min:1,max:168,n:24,ch:'WhatsApp',tpl:'Appointment reminder'},
+      {id:'feedback',name:'Feedback request',desc:'Ask for a rating after the service.',unit:'hours after the service',min:1,max:72,n:2,ch:'SMS',tpl:'Feedback request'},
+      {id:'membership',name:'Membership expiry reminder',desc:'Warn before a membership or package expires.',unit:'days before expiry',min:1,max:90,n:7,ch:'WhatsApp',tpl:'Membership expiry'},
+      {id:'birthday',name:'Birthday offer',desc:'Send the birthday wish and offer ahead of time.',unit:'days before the birthday',min:0,max:30,n:3,ch:'WhatsApp',tpl:'Birthday wish'},
+      {id:'anniversary',name:'Anniversary offer',desc:'Send the anniversary wish and offer ahead of time.',unit:'days before the anniversary',min:0,max:30,n:3,ch:'WhatsApp',tpl:'Anniversary wish'}
+    ];
+    const CHANNELS=['WhatsApp','SMS','Email'];
+
+    const PAYMODES=[['cash','Cash'],['upi','UPI'],['card','Credit / Debit card'],['netbanking','Net banking'],['wallet','Wallets (Paytm, PhonePe…)'],['giftcard','Gift card / voucher'],['package','Membership / package balance'],['cheque','Cheque']];
+
+    // Integrations: fields with type text|select|secret|number
+    const INT={
+      whatsapp:{name:'WhatsApp Business API',tile:'WA',color:'bg-emerald-600',desc:'Send reminders, offers and receipts on WhatsApp.',
+        fields:[{k:'waba',label:'Business Account ID',ph:'e.g. 104938271650012'},{k:'phoneId',label:'Phone Number ID',ph:'e.g. 109283746501923'},{k:'waToken',label:'Permanent Access Token',type:'secret',ph:'EAAG… (dummy)'}],
+        sum:v=>v.waba?`Account ${v.waba}`:'—'},
+      sms:{name:'SMS Gateway',tile:'SMS',color:'bg-sky-600',desc:'Transactional and promotional SMS (DLT registered).',
+        fields:[{k:'smsProv',label:'Provider',type:'select',opts:['MSG91','Twilio','Textlocal','Gupshup']},{k:'sender',label:'Sender ID (6 letters)',ph:'SERENE',re:/^[A-Za-z]{6}$/,msg:'Sender ID must be exactly 6 letters'},{k:'dlt',label:'DLT Entity ID',ph:'e.g. 1101234567890123456',re:/^\d{10,25}$/,msg:'Enter the numeric DLT Entity ID'},{k:'smsKey',label:'API Key',type:'secret',ph:'dummy-sms-key-12345'}],
+        sum:v=>v.smsProv?`${v.smsProv} · Sender ${v.sender||'—'}`:'—'},
+      email:{name:'Email SMTP',tile:'@',color:'bg-violet-600',desc:'Send invoices, reports and campaigns by email.',
+        fields:[{k:'host',label:'SMTP host',ph:'smtp.example.com'},{k:'port',label:'Port',ph:'587',re:/^\d{2,5}$/,msg:'Enter a valid port (e.g. 587)'},{k:'enc',label:'Encryption',type:'select',opts:['TLS','SSL','None']},{k:'smtpUser',label:'Username',ph:'apikey or email'},{k:'smtpPass',label:'Password',type:'secret',ph:'dummy-password'},{k:'from',label:'From address',ph:'hello@serenity.in',re:EMAIL_RE,msg:'Enter a valid email address'}],
+        sum:v=>v.host?`${v.host}:${v.port||'—'}`:'—'},
+      google:{name:'Google Reviews',tile:'G',color:'bg-amber-500',desc:'Request and track Google reviews for your business.',
+        fields:[{k:'placeId',label:'Google Place ID',ph:'ChIJ… (dummy)'},{k:'reviewUrl',label:'Review link',ph:'https://g.page/r/your-business/review',re:/^https?:\/\/\S+$/,msg:'Enter a full link starting with https://'},{k:'gKey',label:'API Key',type:'secret',ph:'AIza… (dummy)'}],
+        sum:v=>v.placeId?`Place ${v.placeId.slice(0,12)}…`:'—'},
+      payment:{name:'Payment Gateway',tile:'₹',color:'bg-teal-600',desc:'Accept UPI, cards and net banking at billing.',
+        fields:[{k:'payProv',label:'Provider',type:'select',opts:['Razorpay','PayU','Cashfree','PhonePe PG']},{k:'keyId',label:'Key ID',ph:'rzp_test_dummy123'},{k:'paySecret',label:'Key Secret',type:'secret',ph:'dummy-secret-1234'},{k:'mode',label:'Mode',type:'select',opts:['Test','Live']}],
+        sum:v=>v.payProv?`${v.payProv} · ${v.mode||'Test'} mode`:'—'}
+    };
+
+    const DEF={
+      profile:{name:'Serenity Spa & Salon',logo:'',address:'Shop 12, Phoenix Road, Viman Nagar, Pune, Maharashtra 411014',phone:'9876543210',email:'hello@serenity.in',gst:'27ABCDE1234F1Z5',
+        hours:DAYS.map((d,i)=>({open:true,from:i===6?'11:00':'10:00',to:i===6?'18:00':'20:00'}))},
+      users:staff.map((s,i)=>({id:i+1,name:s.name,email:s.name.toLowerCase().replace(/\s+/g,'.')+'@serenity.in',role:s.role,status:'Active'})),
+      perms:{Admin:[...ALLM],Manager:[...ALLM],Receptionist:ALLM.filter(m=>!['reports','settings','staff'].includes(m)),Therapist:['dashboard','appointments','customers']},
+      templates:Object.fromEntries(TPL.map(t=>[t.id,{text:t.text,channel:t.channel}])),
+      rules:{...Object.fromEntries(RULES.map(r=>[r.id,{on:r.id!=='anniversary',n:r.n,ch:r.ch}])),
+             inactive:{on:true,days:[30,60,90],ch:'SMS'},quiet:{on:true,from:'21:00',to:'09:00'}},
+      loyalty:{on:true,pts:1,per:100,pointValue:1,minRedeem:100,expiry:12,vipRule:'either',vipSpend:25000,vipVisits:15,vipWindow:'lifetime',pkgDays:60,extDays:15},
+      integrations:{
+        whatsapp:{connected:true,values:{waba:'104938271650012',phoneId:'109283746501923'},secrets:{waToken:'••••••••a1b2'}},
+        sms:{connected:true,values:{smsProv:'MSG91',sender:'SERENE',dlt:'1101234567890123456'},secrets:{smsKey:'••••••••9f3c'}},
+        email:{connected:false,values:{enc:'TLS',port:'587'},secrets:{}},
+        google:{connected:false,values:{},secrets:{}},
+        payment:{connected:true,values:{payProv:'Razorpay',keyId:'rzp_test_dummy123',mode:'Test'},secrets:{paySecret:'••••••••77dd'}}},
+      billing:{gst:18,inclusive:false,prefix:'INV-',next:1011,footer:'Thank you for visiting Serenity! GST invoice. Services once rendered are non-refundable. Packages are valid as per the issued terms.',
+        modes:Object.fromEntries(PAYMODES.map(([k])=>[k,['cash','upi','card','package'].includes(k)]))}
+    };
+    let S=clone(DEF);
+    try{const sv=JSON.parse(localStorage.getItem(KEY)||'null');
+      if(sv)Object.keys(DEF).forEach(k=>{if(sv[k]!==undefined)S[k]=(DEF[k]&&typeof DEF[k]==='object'&&!Array.isArray(DEF[k]))?{...DEF[k],...sv[k]}:sv[k]})}catch(e){}
+    // Make sure the signed-in user appears in the user list
+    if(user.email&&!S.users.some(u=>u.email.toLowerCase()===user.email.toLowerCase()))
+      S.users.unshift({id:Math.max(0,...S.users.map(u=>u.id))+1,name:user.name,email:user.email,role:user.role||'Admin',status:'Active'});
+    const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));return true}catch(e){return false}};
+    // Every Save button ends here → persist + toast
+    const saved=msg=>toast(persist()?msg:'Could not write to browser storage — change kept for this session only');
+
+    /* =========================================================
+       SMALL UI BUILDERS
+       ========================================================= */
+    const IN='w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400';
+    const ERR=id=>`<span id="e_${id}" class="hidden text-xs text-rose-600" role="alert"></span>`;
+    const F=(id,label,o={})=>`<label class="block text-sm text-slate-600 ${o.cls||''}">${label}${o.req?' *':''}<input id="${id}" type="${o.type||'text'}" value="${esc(o.value??'')}" placeholder="${esc(o.ph||'')}" ${o.attrs||''} class="${IN}">${ERR(id)}${o.hint?`<span class="block text-xs text-slate-400 mt-1">${o.hint}</span>`:''}</label>`;
+    const SEL=(id,label,opts,val,o={})=>`<label class="block text-sm text-slate-600 ${o.cls||''}">${label}<select id="${id}" ${o.attrs||''} class="${IN}">${opts.map(x=>{const[v,t]=Array.isArray(x)?x:[x,x];return `<option value="${esc(v)}" ${String(v)===String(val)?'selected':''}>${esc(t)}</option>`}).join('')}</select>${ERR(id)}</label>`;
+    const SW=(id,on,label)=>`<button type="button" role="switch" id="${id}" aria-checked="${!!on}" aria-label="${esc(label)}" class="sw"></button>`;
+    const HEAD=(t,d)=>`<div><h2 class="text-lg font-semibold text-slate-800">${t}</h2><p class="text-sm text-slate-500">${d}</p></div>`;
+    const CARD=(inner,cls='')=>`<div class="card p-5 ${cls}">${inner}</div>`;
+    const SAVE=(act,label='Save changes')=>`<div class="flex justify-end"><button type="button" data-act="${act}" class="btn-primary text-sm">${label}</button></div>`;
+    const isOn=id=>$(id).getAttribute('aria-checked')==='true';
+    const setOn=(id,v)=>$(id).setAttribute('aria-checked',!!v);
+    // Show/clear an inline error; returns true when there is NO error
+    const setErr=(id,m)=>{const e=$('e_'+id),i=$(id);if(e){e.textContent=m||'';e.classList.toggle('hidden',!m)}if(i)i.classList.toggle('border-rose-500',!!m);return !m};
+    const focusErr=panel=>{const el=$(panel).querySelector('.border-rose-500');if(el){el.scrollIntoView({block:'center',behavior:'smooth'});el.focus({preventScroll:true})}};
+    const intIn=(v,min,max)=>/^-?\d+$/.test(String(v).trim())&&+v>=min&&+v<=max;
+    const numIn=(v,min,max)=>String(v).trim()!==''&&isFinite(v)&&+v>=min&&+v<=max;
+    const ROLE_CLS={Admin:'bg-violet-50 text-violet-700',Manager:'bg-amber-50 text-amber-700',Receptionist:'bg-sky-50 text-sky-700',Therapist:'bg-teal-50 text-teal-700'};
+
+    /* =========================================================
+       TABS
+       ========================================================= */
+    const ICON=p=>`<svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg>`;
+    const TABS=[
+      ['profile','Business Profile','M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6'],
+      ['users','Users & Roles','M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8'],
+      ['templates','Message Templates','M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z'],
+      ['rules','Notification Rules','M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0'],
+      ['loyalty','Loyalty & Membership','M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z'],
+      ['integrations','Integrations','M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1'],
+      ['billing','Billing & Tax','M2 6h20v12H2zM2 10h20M6 15h4']];
+    $('tabs').innerHTML=TABS.map(t=>`<button type="button" role="tab" id="tab_${t[0]}" data-tab="${t[0]}" aria-controls="p_${t[0]}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm whitespace-nowrap text-left">${ICON(t[2])}<span>${t[1]}</span></button>`).join('');
+    function showTab(id,focus){
+      if(!TABS.some(t=>t[0]===id))id='profile';
+      TABS.forEach(([k])=>{const on=k===id,b=$('tab_'+k);
+        $('p_'+k).classList.toggle('hidden',!on);b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;
+        b.className='flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm whitespace-nowrap text-left '+(on?'bg-teal-50 text-teal-700 font-semibold':'text-slate-600 hover:bg-slate-50')});
+      history.replaceState(null,'','#'+id);if(focus)$('tab_'+id).focus();
+    }
+    $('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)showTab(b.dataset.tab)});
+    $('tabs').addEventListener('keydown',e=>{                          // arrow-key navigation between tabs
+      const keys=TABS.map(t=>t[0]),cur=keys.findIndex(k=>$('tab_'+k).getAttribute('aria-selected')==='true');
+      const next={ArrowDown:cur+1,ArrowRight:cur+1,ArrowUp:cur-1,ArrowLeft:cur-1,Home:0,End:keys.length-1}[e.key];
+      if(next===undefined)return;e.preventDefault();showTab(keys[(next+keys.length)%keys.length],true);
+    });
+
+    /* =========================================================
+       1. BUSINESS PROFILE
+       ========================================================= */
+    let logoData=S.profile.logo||'';
+    const GST_RE=/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+    function renderProfile(){
+      const p=S.profile;
+      $('p_profile').innerHTML=HEAD('Business Profile','Your salon details shown on invoices, messages and reports.')+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-4">Business details</h3>
+        <div class="flex flex-wrap items-center gap-4 mb-5">
+          <div id="logoBox" class="w-20 h-20 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden grid place-items-center"></div>
+          <div class="text-sm">
+            <div class="flex flex-wrap gap-2">
+              <button type="button" data-act="logo-pick" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">Upload logo</button>
+              <button type="button" data-act="logo-remove" id="logoRemove" class="px-3 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50">Remove</button>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">PNG, JPG, WebP or SVG · max 300 KB · square works best</p>
+            <span id="e_logo" class="hidden text-xs text-rose-600" role="alert"></span>
+            <input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden">
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          ${F('b_name','Business name',{req:1,value:p.name,cls:'sm:col-span-2'})}
+          <label class="block text-sm text-slate-600 sm:col-span-2">Address *<textarea id="b_address" rows="2" class="${IN}">${esc(p.address)}</textarea>${ERR('b_address')}</label>
+          ${F('b_phone','Phone',{req:1,value:p.phone,attrs:'inputmode="tel"'})}
+          ${F('b_email','Email',{req:1,value:p.email,type:'email'})}
+          ${F('b_gst','GST number (GSTIN)',{value:p.gst,ph:'27ABCDE1234F1Z5',attrs:'maxlength="15"',hint:'15 characters. Leave blank if not GST-registered.'})}
+        </div>`)+
+      CARD(`<div class="flex flex-wrap items-center justify-between gap-2 mb-2"><h3 class="font-semibold text-slate-800">Working hours</h3>
+          <button type="button" data-act="hours-copy" class="text-sm text-teal-700 hover:underline">Copy Monday to all days</button></div>
+        <div class="divide-y divide-slate-100">${DAYS.map((d,i)=>{const h=p.hours[i];return `
+          <div class="flex flex-wrap items-center gap-3 py-2.5">
+            <span class="w-24 text-sm font-medium text-slate-700">${d}</span>
+            ${SW('h_open_'+i,h.open,'Open on '+d)}<span id="h_lbl_${i}" class="w-12 text-xs text-slate-500">${h.open?'Open':'Closed'}</span>
+            <input id="h_from_${i}" type="time" value="${h.from}" ${h.open?'':'disabled'} aria-label="${d} opening time" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">
+            <span class="text-slate-400 text-sm">to</span>
+            <input id="h_to_${i}" type="time" value="${h.to}" ${h.open?'':'disabled'} aria-label="${d} closing time" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">
+            ${ERR('h_to_'+i)}
+          </div>`}).join('')}</div>`)+
+      SAVE('profile-save');
+      paintLogo();
+    }
+    function paintLogo(){
+      const box=$('logoBox'),name=($('b_name')?$('b_name').value:S.profile.name)||'S';
+      box.innerHTML=logoData?`<img src="${logoData}" alt="Business logo preview" class="w-full h-full object-contain">`:`<span class="text-2xl font-bold text-teal-600">${esc(name.trim()[0]||'S').toUpperCase()}</span>`;
+      $('logoRemove').classList.toggle('hidden',!logoData);
+    }
+    function pickLogo(file){
+      if(!file)return;
+      const okType=['image/png','image/jpeg','image/webp','image/svg+xml'].includes(file.type);
+      const msg=!okType?'Please choose a PNG, JPG, WebP or SVG image.':file.size>300*1024?'Logo is too large — please keep it under 300 KB.':'';
+      $('e_logo').textContent=msg;$('e_logo').classList.toggle('hidden',!msg);
+      if(msg){$('logoFile').value='';return}
+      const r=new FileReader();r.onload=()=>{logoData=r.result;paintLogo()};r.readAsDataURL(file);   // preview only; saved with the Save button
+    }
+    function saveProfile(){
+      const v={name:$('b_name').value.trim(),address:$('b_address').value.trim(),phone:$('b_phone').value.trim(),email:$('b_email').value.trim(),gst:$('b_gst').value.trim().toUpperCase()};
+      const digits=v.phone.replace(/\D/g,'');
+      const hours=DAYS.map((d,i)=>({open:isOn('h_open_'+i),from:$('h_from_'+i).value,to:$('h_to_'+i).value}));
+      const ok=[
+        setErr('b_name',v.name.length<2?'Enter your business name':''),
+        setErr('b_address',v.address.length<5?'Enter the full address':''),
+        setErr('b_phone',digits.length<8||digits.length>13?'Enter a valid phone number':''),
+        setErr('b_email',!EMAIL_RE.test(v.email)?'Enter a valid email address':''),
+        setErr('b_gst',v.gst&&!GST_RE.test(v.gst)?'Enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5)':''),
+        ...hours.map((h,i)=>setErr('h_to_'+i,h.open&&(!h.from||!h.to||h.to<=h.from)?'Closing time must be after opening time':''))
+      ].every(Boolean);
+      if(!ok){focusErr('p_profile');return}
+      S.profile={...v,logo:logoData,hours};refreshTplPreviews();saved('Business profile saved');
+    }
+
+    /* =========================================================
+       2. USERS & ROLES
+       ========================================================= */
+    function renderUsers(){
+      $('p_users').innerHTML=HEAD('Users & Roles','Control who can sign in and which modules each role can open.')+
+      CARD(`<div class="flex flex-wrap items-center justify-between gap-2 mb-4"><h3 class="font-semibold text-slate-800">Users <span id="userCount" class="text-slate-400 font-normal text-sm"></span></h3>
+          <button type="button" data-act="user-add" class="btn-primary text-sm inline-flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add User</button></div>
+        <div class="overflow-x-auto -mx-5"><table class="w-full text-sm min-w-[640px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide"><tr>
+            <th class="px-5 py-3 text-left font-semibold">Name</th><th class="px-3 py-3 text-left font-semibold">Email</th><th class="px-3 py-3 text-left font-semibold">Role</th><th class="px-3 py-3 text-left font-semibold">Status</th><th class="px-5 py-3 text-right font-semibold">Actions</th></tr></thead>
+          <tbody id="userRows" class="divide-y divide-slate-100"></tbody></table></div>`)+
+      CARD(`<div class="mb-3"><h3 class="font-semibold text-slate-800">Role permissions</h3>
+          <p class="text-sm text-slate-500">Tick the modules each role can open. Admin always has full access and Dashboard is available to everyone.</p></div>
+        <div class="overflow-x-auto -mx-5"><table class="w-full text-sm min-w-[520px]">
+          <thead class="bg-slate-50 text-slate-500 text-xs"><tr><th class="px-5 py-3 text-left font-semibold uppercase tracking-wide">Module</th>
+            ${ROLES.map(r=>`<th class="px-3 py-3 text-center font-semibold"><span class="uppercase tracking-wide">${r}</span>
+              ${r==='Admin'?'':`<span class="block font-normal normal-case mt-0.5"><button type="button" data-act="perm-all" data-role="${r}" class="text-teal-700 hover:underline">all</button> · <button type="button" data-act="perm-none" data-role="${r}" class="text-slate-500 hover:underline">none</button></span>`}</th>`).join('')}</tr></thead>
+          <tbody class="divide-y divide-slate-100">${MODULES.map(([k,l])=>`<tr class="hover:bg-slate-50"><td class="px-5 py-2.5 text-slate-700">${l}</td>
+            ${ROLES.map(r=>{const locked=r==='Admin'||k==='dashboard';return `<td class="px-3 py-2.5 text-center"><input type="checkbox" id="pr_${r}_${k}" ${S.perms[r].includes(k)||locked?'checked':''} ${locked?'disabled':''} aria-label="${r} can open ${l}" class="w-4 h-4 accent-teal-600"></td>`}).join('')}</tr>`).join('')}</tbody></table></div>
+        <p class="mt-3 text-xs text-slate-400">Note: the sidebar in layout.js currently applies built-in role rules; permissions saved here are stored in <code>crmSettings.perms</code> so they can be enforced there.</p>`)+
+      SAVE('perm-save','Save permissions');
+      renderUserRows();
+    }
+    function renderUserRows(){
+      $('userRows').innerHTML=S.users.map(u=>{const me=user.email&&u.email.toLowerCase()===user.email.toLowerCase();return `<tr class="hover:bg-slate-50">
+        <td class="px-5 py-3"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-full ${avatarColor(u.name)} text-white grid place-items-center text-xs font-semibold shrink-0">${initialsOf(u.name)}</div>
+          <span class="font-medium text-slate-800">${esc(u.name)}</span>${me?'<span class="badge badge-new">You</span>':''}</div></td>
+        <td class="px-3 py-3 text-slate-600">${esc(u.email)}</td>
+        <td class="px-3 py-3"><span class="badge ${ROLE_CLS[u.role]||''}">${esc(u.role)}</span></td>
+        <td class="px-3 py-3"><span class="badge ${u.status==='Active'?'badge-active':'badge-inactive'}">${u.status}</span></td>
+        <td class="px-5 py-3 text-right whitespace-nowrap"><button type="button" data-act="user-edit" data-id="${u.id}" class="text-teal-700 hover:underline mr-3">Edit</button>
+          <button type="button" data-act="user-toggle" data-id="${u.id}" class="${u.status==='Active'?'text-rose-600':'text-emerald-700'} hover:underline">${u.status==='Active'?'Deactivate':'Activate'}</button></td></tr>`}).join('');
+      $('userCount').textContent=`(${S.users.length})`;
+    }
+    // Rules that keep the system usable: never lock out the last active Admin, never deactivate yourself
+    function userGuard(target,newRole,newStatus){
+      const me=user.email&&target.email.toLowerCase()===user.email.toLowerCase();
+      if(me&&newStatus!=='Active')return 'You can\'t deactivate your own account.';
+      const admins=S.users.filter(u=>u.role==='Admin'&&u.status==='Active');
+      if(target.role==='Admin'&&target.status==='Active'&&admins.length===1&&(newRole!=='Admin'||newStatus!=='Active'))return 'At least one active Admin is required.';
+      return '';
+    }
+    let editingUser=null;
+    function openUser(u){
+      editingUser=u||null;
+      $('uTitle').textContent=u?'Edit User':'Add User';$('uSave').textContent=u?'Save Changes':'Add User';
+      $('uNote').classList.toggle('hidden',!!u);
+      $('u_name').value=u?u.name:'';$('u_email').value=u?u.email:'';$('u_role').value=u?u.role:'Receptionist';$('u_status').value=u?u.status:'Active';
+      ['u_name','u_email','u_role','u_status'].forEach(i=>setErr(i,''));
+      $('uOv').classList.remove('hidden');$('u_name').focus();
+    }
+    const closeUser=()=>$('uOv').classList.add('hidden');
+    $('uForm').addEventListener('submit',e=>{
+      e.preventDefault();
+      const v={name:$('u_name').value.trim(),email:$('u_email').value.trim(),role:$('u_role').value,status:$('u_status').value};
+      const dup=S.users.some(u=>u!==editingUser&&u.email.toLowerCase()===v.email.toLowerCase());
+      const guard=editingUser?userGuard(editingUser,v.role,v.status):'';
+      const ok=[setErr('u_name',v.name.length<2?'Enter the full name':''),
+                setErr('u_email',!EMAIL_RE.test(v.email)?'Enter a valid email address':dup?'A user with this email already exists':''),
+                setErr('u_role',guard&&v.role!=='Admin'?guard:''),
+                setErr('u_status',guard&&v.role==='Admin'||guard&&v.status!=='Active'?guard:'')].every(Boolean);
+      if(!ok)return;
+      if(editingUser){Object.assign(editingUser,v);saved(`${v.name} updated`)}
+      else{S.users.push({id:Math.max(0,...S.users.map(u=>u.id))+1,...v});saved(`${v.name} added — invitation sent (demo)`)}
+      closeUser();renderUserRows();
+    });
+    $('uX').onclick=$('uCancel').onclick=closeUser;
+    $('uOv').addEventListener('mousedown',e=>{if(e.target===$('uOv'))closeUser()});
+    function toggleUser(id){
+      const u=S.users.find(x=>x.id===+id);if(!u)return;
+      const ns=u.status==='Active'?'Inactive':'Active',g=userGuard(u,u.role,ns);
+      if(g){toast(g);return}
+      u.status=ns;renderUserRows();saved(`${u.name} ${ns==='Active'?'activated':'deactivated'}`);
+    }
+    function savePerms(){
+      ROLES.forEach(r=>{S.perms[r]=r==='Admin'?[...ALLM]:MODULES.filter(([k])=>k==='dashboard'||$(`pr_${r}_${k}`).checked).map(m=>m[0])});
+      saved('Role permissions saved');
+    }
+    const setCol=(role,on)=>MODULES.forEach(([k])=>{const c=$(`pr_${role}_${k}`);if(!c.disabled)c.checked=on});
+
+    /* =========================================================
+       3. MESSAGE TEMPLATES
+       ========================================================= */
+    const fill=t=>t.replace(/\{(\w+)\}/g,(m,k)=>k in SAMPLE?(k==='business'?(S.profile.name||SAMPLE.business):SAMPLE[k]):m);
+    const smsInfo=t=>{const uni=/[^\x00-\x7F₹]/.test(t),one=uni?70:160,multi=uni?67:153,len=[...t].length;return{len,seg:len<=one?1:Math.ceil(len/multi),uni}};
+    function renderTemplates(){
+      $('p_templates').innerHTML=HEAD('Message Templates','Edit the text customers receive. Click a variable chip to insert it where your cursor is.')+
+      TPL.map(t=>{const s=S.templates[t.id];return CARD(`
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-3">
+          <div><h3 class="font-semibold text-slate-800">${t.name}</h3><p class="text-sm text-slate-500">${t.desc}</p></div>
+          <label class="text-xs text-slate-500">Channel<select id="t_ch_${t.id}" class="block mt-1 px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none">${CHANNELS.map(c=>`<option ${c===s.channel?'selected':''}>${c}</option>`).join('')}</select></label>
+        </div>
+        <textarea id="t_text_${t.id}" rows="4" aria-label="${t.name} message text" class="${IN} mt-0">${esc(s.text)}</textarea>
+        ${ERR('t_text_'+t.id)}
+        <div class="flex flex-wrap items-center gap-1.5 mt-2"><span class="text-xs text-slate-500 mr-1">Insert:</span>
+          ${t.vars.map(v=>`<button type="button" data-act="tpl-var" data-id="${t.id}" data-v="${v}" title="${VARDESC[v]}" class="px-2 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-medium hover:bg-teal-100">{${v}}</button>`).join('')}</div>
+        <div class="mt-3 grid md:grid-cols-[1fr,auto] gap-3 items-start">
+          <div><p class="text-xs text-slate-500 mb-1">Preview <span class="text-slate-400">(sample data)</span></p>
+            <div id="t_prev_${t.id}" class="bg-emerald-50 border border-emerald-100 rounded-xl rounded-tl-sm px-3 py-2 text-sm text-slate-700 whitespace-pre-wrap break-words"></div></div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+          <span id="t_cnt_${t.id}" class="text-xs text-slate-400"></span>
+          <div class="flex gap-2"><button type="button" data-act="tpl-reset" data-id="${t.id}" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-sm">Reset to default</button>
+            <button type="button" data-act="tpl-save" data-id="${t.id}" class="btn-primary text-sm">Save template</button></div></div>`)}).join('');
+      refreshTplPreviews();
+    }
+    function refreshTpl(id){
+      const ta=$('t_text_'+id);if(!ta)return;
+      const text=fill(ta.value),info=smsInfo(text),ch=$('t_ch_'+id).value;
+      $('t_prev_'+id).textContent=text||'(empty message)';
+      $('t_cnt_'+id).textContent=`${info.len} characters`+(ch==='SMS'?` · ${info.seg} SMS segment${info.seg>1?'s':''}${info.uni?' (emoji/unicode → 70 chars per SMS)':''}`:'');
+    }
+    const refreshTplPreviews=()=>TPL.forEach(t=>refreshTpl(t.id));
+    function saveTpl(id){
+      const t=TPL.find(x=>x.id===id),ta=$('t_text_'+id),text=ta.value.trim();
+      const unknown=[...new Set([...text.matchAll(/\{(\w+)\}/g)].map(m=>m[1]).filter(k=>!(k in SAMPLE)))];
+      const m=!text?'Message text can\'t be empty':text.length>1000?'Keep the message under 1,000 characters':unknown.length?`Unknown variable${unknown.length>1?'s':''}: ${unknown.map(u=>'{'+u+'}').join(', ')}`:'';
+      if(!setErr('t_text_'+id,m)){ta.focus();return}
+      S.templates[id]={text,channel:$('t_ch_'+id).value};saved(`“${t.name}” template saved`);
+    }
+    function insertVar(id,v){
+      const ta=$('t_text_'+id),a=ta.selectionStart??ta.value.length,b=ta.selectionEnd??a;
+      ta.setRangeText(`{${v}}`,a,b,'end');ta.focus();ta.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+
+    /* =========================================================
+       4. NOTIFICATION RULES
+       ========================================================= */
+    function renderRules(){
+      const R=S.rules;
+      $('p_rules').innerHTML=HEAD('Notification Rules','Choose when automatic messages are sent. Message text comes from the Message Templates tab.')+
+      CARD(`<div class="divide-y divide-slate-100">
+        ${RULES.map(r=>{const s=R[r.id];return `<div class="py-4 grid lg:grid-cols-[1.4fr,1.6fr,9rem] gap-3 items-center">
+          <div class="flex items-center gap-3">${SW('r_on_'+r.id,s.on,'Enable '+r.name)}
+            <div><p class="text-sm font-medium text-slate-800">${r.name}</p><p class="text-xs text-slate-500">${r.desc} Uses “${r.tpl}”.</p></div></div>
+          <div class="text-sm text-slate-600"><div class="flex items-center gap-2 flex-wrap">Send
+            <input id="r_num_${r.id}" type="number" min="${r.min}" max="${r.max}" step="1" value="${s.n}" ${s.on?'':'disabled'} aria-label="${r.name}: number" class="w-20 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">
+            ${r.unit}</div>${ERR('r_num_'+r.id)}</div>
+          <select id="r_ch_${r.id}" ${s.on?'':'disabled'} aria-label="${r.name}: channel" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">${CHANNELS.map(c=>`<option ${c===s.ch?'selected':''}>${c}</option>`).join('')}</select>
+        </div>`}).join('')}
+        <div class="py-4 grid lg:grid-cols-[1.4fr,1.6fr,9rem] gap-3 items-center">
+          <div class="flex items-center gap-3">${SW('r_on_inactive',R.inactive.on,'Enable inactive customer reactivation')}
+            <div><p class="text-sm font-medium text-slate-800">Inactive customer reactivation</p><p class="text-xs text-slate-500">Win back customers who stopped visiting. Uses “Inactive reactivation”.</p></div></div>
+          <div class="text-sm text-slate-600"><span class="block mb-1.5">Send after this many days without a visit:</span>
+            <div class="flex gap-2" id="r_inact_box">${[30,60,90].map(d=>`<label class="cursor-pointer"><input type="checkbox" class="sr-only peer" id="r_in_${d}" value="${d}" ${R.inactive.days.includes(d)?'checked':''} ${R.inactive.on?'':'disabled'}>
+              <span class="inline-block px-3 py-1.5 rounded-full border border-slate-300 text-xs font-medium text-slate-600 peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 peer-disabled:opacity-50 select-none">${d} days</span></label>`).join('')}</div>${ERR('r_in_30')}</div>
+          <select id="r_ch_inactive" ${R.inactive.on?'':'disabled'} aria-label="Reactivation channel" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">${CHANNELS.map(c=>`<option ${c===R.inactive.ch?'selected':''}>${c}</option>`).join('')}</select>
+        </div></div>`)+
+      CARD(`<div class="flex flex-wrap items-center gap-4"><div class="flex items-center gap-3">${SW('r_q_on',R.quiet.on,'Enable quiet hours')}
+          <div><p class="text-sm font-medium text-slate-800">Quiet hours</p><p class="text-xs text-slate-500">Hold automatic messages during these hours and send them afterwards.</p></div></div>
+        <div class="flex items-center gap-2 text-sm text-slate-600 ml-auto">From
+          <input id="r_q_from" type="time" value="${R.quiet.from}" ${R.quiet.on?'':'disabled'} class="px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"> to
+          <input id="r_q_to" type="time" value="${R.quiet.to}" ${R.quiet.on?'':'disabled'} class="px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"></div></div>
+        ${ERR('r_q_from')}`)+
+      SAVE('rules-save','Save rules');
+    }
+    function saveRules(){
+      const next={};let ok=true;
+      RULES.forEach(r=>{
+        const on=isOn('r_on_'+r.id),v=$('r_num_'+r.id).value;
+        const good=!on||intIn(v,r.min,r.max);
+        if(!setErr('r_num_'+r.id,good?'':`Enter a whole number from ${r.min} to ${r.max}`))ok=false;
+        next[r.id]={on,n:good&&on?+v:S.rules[r.id].n,ch:$('r_ch_'+r.id).value};
+      });
+      const days=[30,60,90].filter(d=>$('r_in_'+d).checked),inOn=isOn('r_on_inactive');
+      if(!setErr('r_in_30',inOn&&!days.length?'Select at least one interval':''))ok=false;
+      next.inactive={on:inOn,days:days.length?days:S.rules.inactive.days,ch:$('r_ch_inactive').value};
+      const qOn=isOn('r_q_on'),qf=$('r_q_from').value,qt=$('r_q_to').value;
+      if(!setErr('r_q_from',qOn&&(!qf||!qt||qf===qt)?'Choose different start and end times':''))ok=false;
+      next.quiet={on:qOn,from:qf||S.rules.quiet.from,to:qt||S.rules.quiet.to};
+      if(!ok){focusErr('p_rules');return}
+      S.rules=next;saved('Notification rules saved');
+    }
+
+    /* =========================================================
+       5. LOYALTY & MEMBERSHIP
+       ========================================================= */
+    function renderLoyalty(){
+      const l=S.loyalty;
+      $('p_loyalty').innerHTML=HEAD('Loyalty & Membership','Reward repeat customers and define when a customer becomes VIP.')+
+      CARD(`<div class="flex items-center gap-3 mb-4">${SW('l_on',l.on,'Enable loyalty points')}<div><h3 class="font-semibold text-slate-800">Loyalty points</h3><p class="text-xs text-slate-500">Customers earn points on every paid invoice.</p></div></div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          ${F('l_pts','Points earned',{value:l.pts,type:'number',attrs:`min="0.1" max="100" step="0.1" ${l.on?'':'disabled'}`,hint:'…for every spend of the amount on the right'})}
+          ${F('l_per','per ₹ spent',{value:l.per,type:'number',attrs:`min="1" step="1" ${l.on?'':'disabled'}`,hint:'e.g. 1 point per ₹100'})}
+          ${F('l_pv','Value of 1 point (₹)',{value:l.pointValue,type:'number',attrs:`min="0.1" step="0.1" ${l.on?'':'disabled'}`})}
+          ${F('l_min','Minimum points to redeem',{value:l.minRedeem,type:'number',attrs:`min="0" step="1" ${l.on?'':'disabled'}`})}
+          ${F('l_exp','Points expire after (months)',{value:l.expiry,type:'number',attrs:`min="0" max="60" step="1" ${l.on?'':'disabled'}`,hint:'0 = never expire'})}
+        </div>
+        <p id="l_prev1" class="mt-4 text-sm text-teal-800 bg-teal-50 rounded-lg px-3 py-2"></p>`)+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-1">VIP threshold</h3><p class="text-xs text-slate-500 mb-4">A customer is marked <span class="badge badge-vip">VIP</span> when the condition below is met.</p>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          ${SEL('l_rule','Qualify by',[['spend','Total spend'],['visits','Number of visits'],['either','Spend OR visits'],['both','Spend AND visits']],l.vipRule)}
+          ${F('l_spend','Spend threshold (₹)',{value:l.vipSpend,type:'number',attrs:'min="0" step="500"'})}
+          ${F('l_visits','Visit threshold',{value:l.vipVisits,type:'number',attrs:'min="1" step="1"'})}
+          ${SEL('l_win','Counted over',[['lifetime','Lifetime'],['12','Last 12 months'],['6','Last 6 months']],l.vipWindow)}
+        </div>
+        <p id="l_prev2" class="mt-4 text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2"></p>`)+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-4">Packages & memberships</h3>
+        <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
+          ${F('l_pkg','Default package validity (days)',{value:l.pkgDays,type:'number',attrs:'min="1" max="730" step="1"',hint:'Used when a new package or membership is created.'})}
+          ${F('l_ext','Allow one-time extension up to (days)',{value:l.extDays,type:'number',attrs:'min="0" max="90" step="1"',hint:'0 = extensions not allowed'})}
+        </div>`)+
+      SAVE('loyalty-save');
+      updateLoyaltyPrev();
+    }
+    function updateLoyaltyPrev(){
+      if(!$('l_prev1'))return;
+      const on=isOn('l_on'),pts=+$('l_pts').value,per=+$('l_per').value,pv=+$('l_pv').value,min=+$('l_min').value;
+      const bill=2500,earn=per>0?Math.floor(bill/per*pts*100)/100:0;
+      $('l_prev1').textContent=!on?'Loyalty points are turned off.':(pts>0&&per>0)?`A ₹${bill.toLocaleString('en-IN')} bill earns ${earn} points (worth ${fmtINR(Math.round(earn*pv*100)/100)}). Points can be redeemed from ${min||0} points.`:'Enter valid values to see an example.';
+      const rule=$('l_rule').value,sp=fmtINR(+$('l_spend').value||0),vi=+$('l_visits').value||0,win=$('l_win').value,w=win==='lifetime'?'lifetime':`in the last ${win} months`;
+      const t={spend:`total spend of ${sp}`,visits:`${vi} visits`,either:`total spend of ${sp} or ${vi} visits`,both:`total spend of ${sp} and ${vi} visits`}[rule];
+      $('l_prev2').textContent=`Customers become VIP after reaching ${t} (${w}).`;
+    }
+    function saveLoyalty(){
+      const v={pts:$('l_pts').value,per:$('l_per').value,pv:$('l_pv').value,min:$('l_min').value,exp:$('l_exp').value,spend:$('l_spend').value,visits:$('l_visits').value,pkg:$('l_pkg').value,ext:$('l_ext').value};
+      const ok=[setErr('l_pts',numIn(v.pts,.1,100)?'':'Enter a value between 0.1 and 100'),setErr('l_per',intIn(v.per,1,100000)?'':'Enter a whole number of at least 1'),
+        setErr('l_pv',numIn(v.pv,.1,1000)?'':'Enter a value of at least 0.1'),setErr('l_min',intIn(v.min,0,1000000)?'':'Enter 0 or more'),setErr('l_exp',intIn(v.exp,0,60)?'':'Enter 0 to 60 months'),
+        setErr('l_spend',numIn(v.spend,0,10000000)?'':'Enter 0 or more'),setErr('l_visits',intIn(v.visits,1,1000)?'':'Enter a whole number of at least 1'),
+        setErr('l_pkg',intIn(v.pkg,1,730)?'':'Enter 1 to 730 days'),setErr('l_ext',intIn(v.ext,0,90)?'':'Enter 0 to 90 days')].every(Boolean);
+      if(!ok){focusErr('p_loyalty');return}
+      S.loyalty={on:isOn('l_on'),pts:+v.pts,per:+v.per,pointValue:+v.pv,minRedeem:+v.min,expiry:+v.exp,vipRule:$('l_rule').value,vipSpend:+v.spend,vipVisits:+v.visits,vipWindow:$('l_win').value,pkgDays:+v.pkg,extDays:+v.ext};
+      saved('Loyalty & membership settings saved');
+    }
+
+    /* =========================================================
+       6. INTEGRATIONS
+       ========================================================= */
+    function renderIntegrations(){
+      $('p_integrations').innerHTML=HEAD('Integrations','Connect messaging, reviews and payment services.')+
+      `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${Object.entries(INT).map(([id,d])=>{const st=S.integrations[id];
+        return `<div class="card p-5 flex flex-col">
+          <div class="flex items-start gap-3"><div class="w-11 h-11 rounded-xl ${d.color} text-white grid place-items-center font-bold text-sm shrink-0">${d.tile}</div>
+            <div class="min-w-0 flex-1"><h3 class="font-semibold text-slate-800 truncate">${d.name}</h3>
+              <span class="badge ${st.connected?'badge-active':'badge-inactive'} mt-1">${st.connected?'Connected':'Not connected'}</span></div></div>
+          <p class="text-sm text-slate-500 mt-3">${d.desc}</p>
+          <p class="text-xs text-slate-400 mt-2">${st.connected?esc(d.sum(st.values)):'No credentials configured'}</p>
+          <button type="button" data-act="int-config" data-id="${id}" class="mt-4 self-start px-4 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50">Configure</button></div>`}).join('')}</div>`;
+    }
+    let curInt=null;
+    function openInt(id){
+      curInt=id;const d=INT[id],st=S.integrations[id];
+      $('iTitle').textContent=`Configure ${d.name}`;$('iDesc').textContent=d.desc;
+      $('iBody').innerHTML=d.fields.map(f=>{const val=st.values[f.k]||'',iid='i_'+f.k;
+        if(f.type==='select')return SEL(iid,f.label,f.opts,val||f.opts[0]);
+        if(f.type==='secret'){const hint=st.secrets[f.k];
+          return `<label class="block text-sm text-slate-600">${f.label} *<div class="relative"><input id="${iid}" type="password" autocomplete="new-password" placeholder="${esc(hint?`Saved (${hint}) — leave blank to keep`:f.ph)}" class="${IN} pr-16">
+            <button type="button" data-act="pw-toggle" data-t="${iid}" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-teal-700 hover:underline">Show</button></div>${ERR(iid)}</label>`}
+        return F(iid,f.label+' *',{value:val,ph:f.ph});}).join('');
+      $('iDisc').classList.toggle('hidden',!st.connected);
+      $('iSave').textContent=st.connected?'Save changes':'Save & connect';
+      $('iOv').classList.remove('hidden');
+      const first=$('iBody').querySelector('input,select');if(first)first.focus();
+    }
+    const closeInt=()=>{$('iOv').classList.add('hidden');curInt=null};
+    // Validate the modal; returns {ok,values,secrets}
+    function readInt(){
+      const d=INT[curInt],st=S.integrations[curInt],values={},secrets={...st.secrets};let ok=true;
+      d.fields.forEach(f=>{
+        const el=$('i_'+f.k),v=el.value.trim();let m='';
+        if(f.type==='secret'){if(!v&&!secrets[f.k])m='Required';else if(v){if(v.length<8)m='Too short — use at least 8 characters';else secrets[f.k]='••••••••'+v.slice(-4)}}
+        else{if(!v)m='Required';else if(f.re&&!f.re.test(v))m=f.msg||'Invalid value';values[f.k]=v}
+        if(!setErr('i_'+f.k,m))ok=false;
+      });
+      return{ok,values,secrets};
+    }
+    $('iForm').addEventListener('submit',e=>{
+      e.preventDefault();const r=readInt();if(!r.ok){const b=$('iBody').querySelector('.border-rose-500');if(b)b.focus();return}
+      S.integrations[curInt]={connected:true,values:r.values,secrets:r.secrets};
+      const n=INT[curInt].name;closeInt();renderIntegrations();saved(`${n} connected`);
+    });
+    $('iTest').onclick=()=>{const r=readInt();if(!r.ok){const b=$('iBody').querySelector('.border-rose-500');if(b)b.focus();return}toast('Connection test passed (demo — no request was made)')};
+    $('iDisc').onclick=()=>{const n=INT[curInt].name;S.integrations[curInt].connected=false;closeInt();renderIntegrations();saved(`${n} disconnected`)};
+    $('iX').onclick=$('iCancel').onclick=closeInt;
+    $('iOv').addEventListener('mousedown',e=>{if(e.target===$('iOv'))closeInt()});
+
+    /* =========================================================
+       7. BILLING & TAX
+       ========================================================= */
+    function renderBilling(){
+      const b=S.billing;
+      $('p_billing').innerHTML=HEAD('Billing & Tax','Tax rate, invoice numbering and accepted payment modes.')+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-4">Tax</h3>
+        <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
+          ${SEL('bl_gst','GST rate',[[0,'0% (exempt)'],[5,'5%'],[12,'12%'],[18,'18% (standard for salon & spa)'],[28,'28%']],b.gst)}
+          <div class="flex items-center gap-3 sm:pt-6">${SW('bl_incl',b.inclusive,'Prices include GST')}<div><p class="text-sm font-medium text-slate-800">Prices include GST</p><p class="text-xs text-slate-500">Off = GST is added on top of the price.</p></div></div>
+        </div>
+        <p id="bl_prev_tax" class="mt-4 text-sm text-teal-800 bg-teal-50 rounded-lg px-3 py-2"></p>`)+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-4">Invoice</h3>
+        <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
+          ${F('bl_prefix','Invoice prefix',{value:b.prefix,attrs:'maxlength="10"',hint:'Letters, numbers, - _ / (max 10 characters)'})}
+          ${F('bl_next','Next invoice number',{value:b.next,type:'number',attrs:'min="1" step="1"'})}
+          <label class="block text-sm text-slate-600 sm:col-span-2">Invoice footer text<textarea id="bl_footer" rows="3" maxlength="300" class="${IN}">${esc(b.footer)}</textarea>${ERR('bl_footer')}
+            <span id="bl_cnt" class="block text-xs text-slate-400 mt-1"></span></label>
+        </div>
+        <p class="mt-3 text-sm text-slate-600">Next invoice will be <span id="bl_prev_inv" class="font-semibold text-slate-800"></span></p>`)+
+      CARD(`<h3 class="font-semibold text-slate-800 mb-1">Payment modes</h3><p class="text-xs text-slate-500 mb-3">Only enabled modes appear at billing. Keep at least one on.</p>
+        <div class="grid sm:grid-cols-2 gap-x-8 divide-y sm:divide-y-0 divide-slate-100">${PAYMODES.map(([k,l])=>`<div class="flex items-center justify-between py-2.5 sm:border-b sm:border-slate-100"><span class="text-sm text-slate-700">${l}</span>${SW('bm_'+k,b.modes[k],l)}</div>`).join('')}</div>
+        ${ERR('bm_cash')}`)+
+      SAVE('billing-save');
+      updateBillPrev();
+    }
+    function updateBillPrev(){
+      if(!$('bl_prev_tax'))return;
+      const g=+$('bl_gst').value,incl=isOn('bl_incl'),r2=x=>Math.round(x*100)/100,m=x=>fmtINR(r2(x));
+      let text;
+      if(!g)text='GST is 0% — a ₹1,000 service is billed at ₹1,000.';
+      else if(incl){const base=1000/(1+g/100),tax=1000-base;text=`A ₹1,000 service includes ${m(tax)} GST: base ${m(base)} + CGST ${m(tax/2)} + SGST ${m(tax/2)}.`}
+      else{const tax=1000*g/100;text=`A ₹1,000 service + CGST ${m(tax/2)} + SGST ${m(tax/2)} = ${m(1000+tax)} (intra-state).`}
+      $('bl_prev_tax').textContent=text;
+      $('bl_prev_inv').textContent=($('bl_prefix').value||'')+($('bl_next').value||'');
+      $('bl_cnt').textContent=`${$('bl_footer').value.length}/300 characters`;
+    }
+    function saveBilling(){
+      const prefix=$('bl_prefix').value.trim(),next=$('bl_next').value,footer=$('bl_footer').value.trim();
+      const modes=Object.fromEntries(PAYMODES.map(([k])=>[k,isOn('bm_'+k)]));
+      const ok=[setErr('bl_prefix',/^[A-Za-z0-9\-_\/]{1,10}$/.test(prefix)?'':'Use 1–10 letters, numbers or - _ /'),
+                setErr('bl_next',intIn(next,1,99999999)?'':'Enter a whole number of at least 1'),
+                setErr('bl_footer',footer.length>300?'Keep the footer under 300 characters':''),
+                setErr('bm_cash',Object.values(modes).some(Boolean)?'':'Enable at least one payment mode')].every(Boolean);
+      if(!ok){focusErr('p_billing');return}
+      S.billing={gst:+$('bl_gst').value,inclusive:isOn('bl_incl'),prefix,next:+next,footer,modes};
+      saved('Billing & tax settings saved');
+    }
+
+    /* =========================================================
+       EVENT WIRING (delegated, so re-rendered panels keep working)
+       ========================================================= */
+    // Toggle switches
+    document.addEventListener('click',e=>{
+      const s=e.target.closest('.sw');if(!s||s.disabled)return;
+      setOn(s.id,s.getAttribute('aria-checked')!=='true');onSwitch(s.id);
+    });
+    function onSwitch(id){
+      const on=isOn(id);
+      if(id.startsWith('h_open_')){const i=id.slice(7);$('h_from_'+i).disabled=$('h_to_'+i).disabled=!on;$('h_lbl_'+i).textContent=on?'Open':'Closed'}
+      else if(id==='r_on_inactive'){[30,60,90].forEach(d=>$('r_in_'+d).disabled=!on);$('r_ch_inactive').disabled=!on}
+      else if(id.startsWith('r_on_')){const r=id.slice(5);$('r_num_'+r).disabled=$('r_ch_'+r).disabled=!on}
+      else if(id==='r_q_on'){$('r_q_from').disabled=$('r_q_to').disabled=!on}
+      else if(id==='l_on'){['l_pts','l_per','l_pv','l_min','l_exp'].forEach(i=>$(i).disabled=!on);updateLoyaltyPrev()}
+      else if(id==='bl_incl')updateBillPrev();
+    }
+    // Buttons with data-act
+    const ACT={
+      'logo-pick':()=>$('logoFile').click(),
+      'logo-remove':()=>{logoData='';$('logoFile').value='';paintLogo()},
+      'hours-copy':()=>{const o=isOn('h_open_0'),f=$('h_from_0').value,t=$('h_to_0').value;
+        DAYS.forEach((d,i)=>{setOn('h_open_'+i,o);$('h_from_'+i).value=f;$('h_to_'+i).value=t;onSwitch('h_open_'+i)});toast('Monday\'s hours copied to all days — remember to Save')},
+      'profile-save':saveProfile,
+      'user-add':()=>openUser(null),
+      'user-edit':b=>openUser(S.users.find(u=>u.id===+b.dataset.id)),
+      'user-toggle':b=>toggleUser(b.dataset.id),
+      'perm-all':b=>setCol(b.dataset.role,true),'perm-none':b=>setCol(b.dataset.role,false),'perm-save':savePerms,
+      'tpl-var':b=>insertVar(b.dataset.id,b.dataset.v),
+      'tpl-reset':b=>{const t=TPL.find(x=>x.id===b.dataset.id);$('t_text_'+t.id).value=t.text;$('t_ch_'+t.id).value=t.channel;setErr('t_text_'+t.id,'');refreshTpl(t.id);toast(`“${t.name}” reset to default — click Save template to keep it`)},
+      'tpl-save':b=>saveTpl(b.dataset.id),
+      'rules-save':saveRules,'loyalty-save':saveLoyalty,'billing-save':saveBilling,
+      'int-config':b=>openInt(b.dataset.id),
+      'pw-toggle':b=>{const i=$(b.dataset.t),show=i.type==='password';i.type=show?'text':'password';b.textContent=show?'Hide':'Show'}
+    };
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b&&ACT[b.dataset.act])ACT[b.dataset.act](b)});
+    // Live previews / helpers
+    document.addEventListener('input',e=>{
+      const id=e.target.id||'';
+      if(id.startsWith('t_text_'))refreshTpl(id.slice(7));
+      else if(id.startsWith('l_'))updateLoyaltyPrev();
+      else if(id==='bl_prefix'||id==='bl_next'||id==='bl_footer')updateBillPrev();
+      else if(id==='b_gst')e.target.value=e.target.value.toUpperCase();
+      else if(id==='b_name')paintLogo();
+      if(e.target.classList&&e.target.classList.contains('border-rose-500'))e.target.classList.remove('border-rose-500');   // clear red border once the user edits
+    });
+    document.addEventListener('change',e=>{
+      const id=e.target.id||'';
+      if(id.startsWith('t_ch_'))refreshTpl(id.slice(5));
+      else if(id.startsWith('l_'))updateLoyaltyPrev();
+      else if(id==='bl_gst')updateBillPrev();
+      else if(id==='logoFile')pickLogo(e.target.files[0]);
+    });
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeUser();closeInt()}});
+
+    /* ---------- Init ---------- */
+    renderProfile();renderUsers();renderTemplates();renderRules();renderLoyalty();renderIntegrations();renderBilling();
+    showTab(location.hash.slice(1));                                   // deep link: settings.html#billing
+    window.addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
+  })();
+  </script>
+</body>
+</html>

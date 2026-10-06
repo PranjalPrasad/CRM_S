@@ -1,0 +1,7 @@
+/* Login page styles (Tailwind handles layout; this adds the spa feel) */
+body{font-family:'Inter',system-ui,sans-serif}
+.hero-panel{background:radial-gradient(circle at 20% 15%,#5eead4 0,transparent 40%),radial-gradient(circle at 85% 90%,#0f766e 0,transparent 55%),linear-gradient(160deg,#0f766e,#115e59 60%,#134e4a)}
+.hero-panel::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 120%,rgba(255,255,255,.18),transparent 55%);pointer-events:none}
+.field-error{color:#e11d48;font-size:.75rem;margin-top:.25rem;display:none}
+.field-error.show{display:block}
+.input-invalid{border-color:#e11d48!important}

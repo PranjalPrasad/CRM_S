@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Staff · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <style>
+    /* Cards: hover lift */
+    .hv-card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+    .hv-card:hover{transform:translateY(-3px);box-shadow:0 12px 24px -8px rgba(15,23,42,.18);border-color:#5eead4}
+    .hv-card:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(13,148,136,.3);border-color:#0d9488}
+
+    /* Form controls */
+    .fld{display:block;width:100%;margin-top:.375rem;padding:.55rem .75rem;min-height:2.5rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;color:#1e293b;font-size:.875rem;line-height:1.25rem;transition:border-color .15s,box-shadow .15s}
+    .fld:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.18)}
+    .fld.err{border-color:#e11d48;box-shadow:0 0 0 3px rgba(225,29,72,.12)}
+    .lbl{display:block;font-size:.8125rem;font-weight:500;color:#475569}
+    .field-err{display:block;margin-top:.25rem;font-size:.75rem;color:#e11d48}
+    .field-err.hidden{display:none}
+    .hdr-ctl{height:2.5rem}
+
+    /* Modal animation */
+    #modalOv.open{display:block}
+    #modalOv{backdrop-filter:blur(2px)}
+    #form{animation:pop .18s ease-out}
+    @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+
+    /* Pagination */
+    .pg-btn{min-width:2.25rem;height:2.25rem;padding:0 .6rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;color:#475569;font-size:.8125rem;font-weight:500;transition:background .15s,border-color .15s}
+    .pg-btn:hover:not(:disabled):not(.active){background:#f1f5f9}
+    .pg-btn.active{background:#0d9488;border-color:#0d9488;color:#fff}
+    .pg-btn:disabled{opacity:.4;cursor:not-allowed}
+
+    /* Sidebar collapse / expand (desktop) */
+    .app-wrap{transition:padding-left .25s ease}
+    #sbToggle{display:none}
+    @media (min-width:1024px){
+      #sbToggle{display:grid;position:fixed;top:18px;left:242px;z-index:40;width:28px;height:28px;place-items:center;border-radius:9999px;background:#fff;border:1px solid #cbd5e1;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.12);transition:left .25s ease,background .15s}
+      #sbToggle:hover{background:#f1f5f9}
+      #sbToggle svg{transition:transform .25s ease}
+      body.sb-collapsed #sbToggle{left:10px}
+      body.sb-collapsed #sbToggle svg{transform:rotate(180deg)}
+    }
+  </style>
+</head>
+<body data-page="staff" data-title="Staff">
+  <button id="sbToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse / expand sidebar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <div class="app-wrap lg:pl-64 min-h-screen flex flex-col">
+    <div id="app-topbar"></div>
+
+    <main class="flex-1 p-4 lg:p-8 space-y-6">
+
+      <!-- ===== Page header ===== -->
+      <section class="flex flex-wrap items-center gap-3">
+        <div class="inline-flex p-1 rounded-xl bg-slate-200/70 text-sm" role="tablist">
+          <button id="tabTeam" role="tab" aria-selected="true" class="px-4 py-1.5 rounded-lg font-medium">Team</button>
+          <button id="tabPerf" role="tab" aria-selected="false" class="px-4 py-1.5 rounded-lg font-medium">Staff Performance</button>
+        </div>
+
+        <div class="ml-auto flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div class="relative flex-1 sm:flex-none sm:w-64">
+            <input id="q" type="search" placeholder="Search name, role or phone…" aria-label="Search staff"
+                   class="hdr-ctl w-full pl-9 pr-3 text-sm rounded-lg bg-white border border-slate-300 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 focus:outline-none">
+            <svg class="w-4 h-4 absolute left-3 top-3 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" viewBox="0 0 24 24"><path d="M21 21l-4.3-4.3M11 19a8 8 0 100-16 8 8 0 000 16z"/></svg>
+          </div>
+          <select id="roleFilter" aria-label="Filter by role" class="hdr-ctl px-3 text-sm rounded-lg bg-white border border-slate-300 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 focus:outline-none">
+            <option value="">All roles</option><option>Therapist</option><option>Stylist</option><option>Receptionist</option><option>Manager</option>
+          </select>
+          <button id="addBtn" type="button" class="btn-primary hdr-ctl text-sm inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add Staff
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== TAB 1: Team cards ===== -->
+      <section id="panelTeam" role="tabpanel" class="space-y-4">
+        <p id="summary" class="text-sm text-slate-500"></p>
+        <div id="grid" class="grid sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-5"></div>
+        <div id="empty" class="hidden card p-10 text-center text-slate-500 text-sm">No staff match your search.</div>
+      </section>
+
+      <!-- ===== TAB 2: Performance ===== -->
+      <section id="panelPerf" role="tabpanel" class="hidden space-y-6">
+        <div class="card p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-slate-800 text-sm">Revenue by staff · this month</h3>
+            <span class="text-xs text-slate-400">Bars follow the table's sort order</span>
+          </div>
+          <div class="h-72"><canvas id="perfChart"></canvas></div>
+        </div>
+
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm min-w-[760px]">
+              <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+                <tr id="perfHead"></tr>
+              </thead>
+              <tbody id="perfBody" class="divide-y divide-slate-100"></tbody>
+              <tfoot id="perfFoot" class="bg-slate-50 font-semibold text-slate-700"></tfoot>
+            </table>
+          </div>
+          <!-- Table pagination -->
+          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-100">
+            <label class="text-sm text-slate-500 flex items-center gap-2">Rows per page
+              <select id="pgSize" class="fld !mt-0 !w-auto !min-h-0 !py-1.5"><option>5</option><option>10</option><option>20</option></select>
+            </label>
+            <nav id="pager" class="flex flex-wrap items-center gap-3" aria-label="Table pagination"></nav>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== Detail drawer ===== -->
+  <div id="drvOv" class="fixed inset-0 z-50 hidden bg-slate-900/40"></div>
+  <aside id="drawer" role="dialog" aria-modal="true" aria-label="Staff details"
+         class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-slate-50 shadow-2xl translate-x-full transition-transform duration-200 overflow-y-auto"></aside>
+
+  <!-- ===== Add / Edit overlay form ===== -->
+  <div id="modalOv" class="fixed inset-0 z-[60] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="form" novalidate class="bg-white rounded-2xl mx-auto my-6 shadow-xl w-full max-w-2xl" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100">
+        <h3 id="mTitle" class="text-lg font-semibold text-slate-800">Add Staff</h3>
+        <button type="button" id="mX" class="w-8 h-8 grid place-items-center rounded-full text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="px-6 py-5">
+        <div class="grid sm:grid-cols-2 gap-x-4 gap-y-4 items-start text-sm">
+          <div><label class="lbl" for="f_name">Full name *</label>
+            <input id="f_name" class="fld" placeholder="e.g. Meera Joshi" autocomplete="off">
+            <span id="e_name" class="field-err hidden"></span></div>
+          <div><label class="lbl" for="f_phone">Phone *</label>
+            <input id="f_phone" inputmode="numeric" maxlength="10" class="fld" placeholder="10-digit mobile" autocomplete="off">
+            <span id="e_phone" class="field-err hidden"></span></div>
+          <div><label class="lbl" for="f_email">Email *</label>
+            <input id="f_email" type="email" class="fld" placeholder="name@serenity.in" autocomplete="off">
+            <span id="e_email" class="field-err hidden"></span></div>
+          <div><label class="lbl" for="f_role">Role *</label>
+            <select id="f_role" class="fld"><option>Therapist</option><option>Stylist</option><option>Receptionist</option><option>Manager</option></select></div>
+          <div><label class="lbl" for="f_join">Joining date *</label>
+            <input id="f_join" type="date" class="fld">
+            <span id="e_join" class="field-err hidden"></span></div>
+          <div><label class="lbl" for="f_comm">Commission % *</label>
+            <input id="f_comm" type="number" min="0" max="100" step="0.5" class="fld">
+            <span id="e_comm" class="field-err hidden"></span></div>
+          <div><label class="lbl" for="f_status">Today's status</label>
+            <select id="f_status" class="fld"><option>Available</option><option>In Service</option><option>Off</option></select></div>
+          <div>
+            <div class="grid grid-cols-2 gap-3 items-start">
+              <div><label class="lbl" for="f_from">Shift starts</label><input id="f_from" type="time" class="fld"></div>
+              <div><label class="lbl" for="f_to">Shift ends</label><input id="f_to" type="time" class="fld"></div>
+            </div>
+            <span id="e_time" class="field-err hidden"></span>
+          </div>
+        </div>
+
+        <fieldset class="mt-5 text-sm">
+          <legend class="lbl mb-2">Working days *</legend>
+          <div id="f_days" class="flex flex-wrap gap-2"></div>
+          <span id="e_days" class="field-err hidden"></span>
+        </fieldset>
+
+        <fieldset class="mt-5 text-sm">
+          <legend class="lbl mb-2">Specialization <span class="text-slate-400 font-normal">(select all that apply)</span></legend>
+          <div id="f_skills" class="flex flex-wrap gap-2"></div>
+        </fieldset>
+      </div>
+
+      <div class="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/60 rounded-b-2xl">
+        <button type="button" id="mCancel" class="px-4 h-10 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button>
+        <button type="submit" id="mSave" class="btn-primary text-sm h-10">Save Staff</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 right-5 z-[70] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+
+  <script>
+  (function(){
+    /* ---------- Guards ---------- */
+    let user={};try{user=JSON.parse(localStorage.getItem('crmUser'))||{}}catch(e){}
+    if(!user.name)return;
+    if(['Therapist','Receptionist'].includes(user.role)){location.replace('dashboard.html');return}
+
+    const $=id=>document.getElementById(id);
+    const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const ROLE_CLS={Therapist:'bg-teal-50 text-teal-700',Stylist:'bg-violet-50 text-violet-700',Receptionist:'bg-sky-50 text-sky-700',Manager:'bg-amber-50 text-amber-700'};
+    const STATUS_CLS={Available:'bg-emerald-100 text-emerald-700','In Service':'bg-amber-100 text-amber-700',Off:'bg-slate-200 text-slate-600'};
+    const DOT_CLS={Available:'bg-emerald-500','In Service':'bg-amber-500',Off:'bg-slate-400'};
+    const svcNames=services.map(s=>s.name);
+
+    /* ---------- Sidebar collapse / expand ---------- */
+    const tgl=$('sbToggle'),DESK=matchMedia('(min-width:1024px)'),wrap=document.querySelector('.app-wrap');
+    let collapsed=false;try{collapsed=localStorage.getItem('sbCollapsed')==='1'}catch(e){}
+    // Find the real sidebar element that layout.js injected (fixed, full-height, left edge)
+    const findSidebar=()=>{
+      const host=$('app-sidebar');let el=host&&host.firstElementChild;
+      const ok=e=>{if(!e)return false;const cs=getComputedStyle(e),r=e.getBoundingClientRect();return cs.position==='fixed'&&r.height>=innerHeight*.7&&r.width>100&&r.width<420};
+      if(ok(el))return el;
+      return [...document.querySelectorAll('aside,nav,#app-sidebar,#app-sidebar *')].find(ok)||el||host};
+    let sbW=0;
+    const applySb=()=>{
+      const sb=findSidebar(),desk=DESK.matches,hide=desk&&collapsed;
+      if(sb&&!hide){const w=sb.offsetWidth;if(w>100)sbW=w}
+      if(sb){sb.style.transition='transform .25s ease';sb.style.transform=hide?'translateX(-100%)':''}
+      if(wrap)wrap.style.paddingLeft=hide?'3.5rem':'';          // slim rail so the toggle never overlaps the page
+      tgl.style.left=(hide?12:(sbW||256)-14)+'px';
+      document.body.classList.toggle('sb-collapsed',hide);
+      tgl.setAttribute('aria-expanded',String(!hide));tgl.setAttribute('aria-label',hide?'Expand sidebar':'Collapse sidebar')};
+    const setSb=c=>{collapsed=c;try{localStorage.setItem('sbCollapsed',c?'1':'0')}catch(e){}applySb();setTimeout(()=>window.dispatchEvent(new Event('resize')),290)};
+    tgl.onclick=()=>setSb(!collapsed);
+    DESK.addEventListener('change',applySb);
+    if($('app-sidebar'))new MutationObserver(applySb).observe($('app-sidebar'),{childList:true});
+    applySb();
+
+    /* ---------- Staff dataset ---------- */
+    const EXTRA=[
+      {svc:12,cust:10,rev:24000, comm:5, status:'Available',  days:[0,1,2,3,4,5],from:'09:30',to:'18:30',skills:['Signature Facial','Haircut & Styling'],join:'2021-03-15'},
+      {svc:9, cust:8, rev:16000, comm:5, status:'Available',  days:[0,1,2,3,4,5],from:'09:30',to:'18:30',skills:['Haircut & Styling'],join:'2020-08-01'},
+      {svc:0, cust:0, rev:0,     comm:0, status:'Available',  days:[0,1,2,3,4,5],from:'09:30',to:'18:30',skills:[],join:'2022-06-10'},
+      {svc:92,cust:71,rev:172000,comm:15,status:'In Service', days:[0,1,2,3,4,5],from:'10:00',to:'19:00',skills:['Swedish Massage','Deep Tissue Massage','Aromatherapy'],join:'2021-11-20'},
+      {svc:84,cust:66,rev:158000,comm:15,status:'Available',  days:[0,1,2,4,5,6],from:'10:00',to:'19:00',skills:['Swedish Massage','Aromatherapy','Body Scrub & Wrap'],join:'2022-02-14'},
+      {svc:67,cust:52,rev:126000,comm:12,status:'Off',        days:[0,1,2,3,4],  from:'11:00',to:'20:00',skills:['Signature Facial','Body Scrub & Wrap','Deep Tissue Massage'],join:'2023-01-09'},
+      {svc:78,cust:60,rev:112000,comm:18,status:'In Service', days:[1,2,3,4,5,6],from:'10:00',to:'19:30',skills:['Hair Spa','Haircut & Styling','Bridal Makeup'],join:'2022-09-05'},
+      {svc:61,cust:49,rev:79000, comm:15,status:'Available',  days:[0,1,2,3,4,5],from:'10:00',to:'19:00',skills:['Manicure','Pedicure','Hair Spa'],join:'2023-07-17'}
+    ];
+    const MORE=[{name:'Meenal Kulkarni',role:'Stylist',mobile:'9823456710',rating:4.6},{name:'Imran Qureshi',role:'Stylist',mobile:'9890123456',rating:4.3}];
+    const mkEmail=n=>n.toLowerCase().replace(/[^a-z ]/g,'').trim().replace(/\s+/g,'.')+'@serenity.in';
+
+    let list=staff.map(s=>({id:s.id,name:s.name,role:s.role==='Admin'?'Manager':s.role,mobile:s.mobile,rating:+s.rating}))
+                  .concat(MORE.map((m,i)=>({id:staff.length+i+1,...m})))
+                  .map((s,i)=>({...s,email:mkEmail(s.name),...EXTRA[i],skills:[...EXTRA[i].skills],days:[...EXTRA[i].days]}));
+
+    /* ---------- Derived helpers ---------- */
+    const commissionOf=s=>Math.round(s.rev*s.comm/100);
+    const k=v=>v>=1000?'₹'+Math.round(v/1000)+'k':'₹'+v;
+    const fmtTime=t=>{const[h,m]=t.split(':').map(Number);return `${h%12||12}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`};
+    const daysText=a=>{const d=[...a].sort((x,y)=>x-y);if(!d.length)return 'No working days';
+      return d.every((v,i)=>i===0||v===d[i-1]+1)&&d.length>2?`${DAYS[d[0]]} – ${DAYS[d[d.length-1]]}`:d.map(i=>DAYS[i]).join(', ')};
+    const tenure=iso=>{const m=Math.max(0,Math.floor((Date.now()-new Date(iso))/2629800000));return m<12?`${m} mo`:`${Math.floor(m/12)} yr${m>=24?'s':''}${m%12?` ${m%12} mo`:''}`};
+    const stars=r=>`<span class="relative inline-block text-slate-300 leading-none" aria-label="${r} out of 5">★★★★★<span class="absolute left-0 top-0 overflow-hidden whitespace-nowrap text-amber-400" style="width:${r/5*100}%">★★★★★</span></span>`;
+    const ratingHtml=s=>s.rating?`<span class="inline-flex items-center gap-1.5 text-sm">${stars(s.rating)}<span class="font-medium text-slate-700">${s.rating.toFixed(1)}</span></span>`:'<span class="text-xs text-slate-400">No ratings yet</span>';
+    const monthly=s=>[.70,.78,.85,.92,.96,1].map((f,m,a)=>m===a.length-1?s.rev:Math.round(s.rev*f*(1+(((s.id*5+m*3)%7)-3)/50)/100)*100);
+    function schedule(s){
+      if(s.status==='Off')return {note:'On leave today.'};
+      if(!s.skills.length)return {note:'Front-desk / management duty — no client appointments.'};
+      const slots=['10:00','11:30','13:30','15:00','16:30'].slice(0,4+(s.id%2));
+      const done=s.status==='In Service'?1:2;
+      return {items:slots.map((t,i)=>({time:t,customer:names[(s.id*4+i*3)%names.length],service:s.skills[i%s.skills.length],
+        state:i<done?'Completed':(i===done&&s.status==='In Service'?'In Progress':'Upcoming')}))};
+    }
+    const reviewsOf=s=>[0,1,2].map(i=>feedback[(s.id*3+i)%feedback.length]);
+
+    /* ---------- UI helpers ---------- */
+    let tt;const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2800)};
+    const avatar=(s,size='w-14 h-14 text-lg')=>`<div class="${size} rounded-full ${avatarColor(s.name)} text-white grid place-items-center font-semibold shrink-0">${initialsOf(s.name)}</div>`;
+    const statusBadge=st=>`<span class="badge inline-flex items-center gap-1.5 ${STATUS_CLS[st]}"><span class="w-1.5 h-1.5 rounded-full ${DOT_CLS[st]}"></span>${st}</span>`;
+    const roleBadge=r=>`<span class="badge ${ROLE_CLS[r]}">${r}</span>`;
+
+    /* =========================================================
+       TEAM TAB
+       ========================================================= */
+    function renderTeam(){
+      const q=$('q').value.trim().toLowerCase(),role=$('roleFilter').value;
+      const rows=list.filter(s=>(!role||s.role===role)&&(!q||[s.name,s.role,s.mobile].some(v=>v.toLowerCase().includes(q))));
+      $('grid').innerHTML=rows.map(s=>`
+        <article data-id="${s.id}" tabindex="0" role="button" aria-label="View details for ${esc(s.name)}"
+                 class="hv-card card p-5 cursor-pointer flex flex-col">
+          <div class="flex items-start gap-3">
+            ${avatar(s)}
+            <div class="min-w-0 flex-1">
+              <h3 class="font-semibold text-slate-800 truncate">${esc(s.name)}</h3>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">${roleBadge(s.role)}${statusBadge(s.status)}</div>
+              <p class="mt-2 text-xs text-slate-500">📞 ${esc(s.mobile)}</p>
+            </div>
+          </div>
+          <div class="mt-3">${ratingHtml(s)}</div>
+          <div class="mt-auto pt-4"><div class="pt-4 border-t border-slate-100 grid grid-cols-3 gap-2 text-center">
+            <div><p class="text-base font-semibold text-slate-800">${s.svc}</p><p class="text-[11px] text-slate-500 leading-tight">Services<br>this month</p></div>
+            <div><p class="text-base font-semibold text-teal-700">${fmtINR(s.rev)}</p><p class="text-[11px] text-slate-500 leading-tight">Revenue</p></div>
+            <div><p class="text-base font-semibold text-slate-800">${s.cust}</p><p class="text-[11px] text-slate-500 leading-tight">Customers<br>served</p></div>
+          </div></div>
+        </article>`).join('');
+      $('empty').classList.toggle('hidden',rows.length>0);
+      const c=st=>list.filter(s=>s.status===st).length;
+      $('summary').textContent=`${list.length} team members · ${c('Available')} available · ${c('In Service')} in service · ${c('Off')} off today`;
+    }
+    $('q').addEventListener('input',renderTeam);
+    $('roleFilter').addEventListener('change',renderTeam);
+    const openFromCard=e=>{const c=e.target.closest('[data-id]');if(c)openDrawer(+c.dataset.id)};
+    $('grid').addEventListener('click',openFromCard);
+    $('grid').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openFromCard(e)}});
+
+    /* =========================================================
+       DETAIL DRAWER
+       ========================================================= */
+    let drvId=null,drvChart=null,perfChart=null;
+    const section=(title,body)=>`<section class="card p-4"><h4 class="text-sm font-semibold text-slate-800 mb-3">${title}</h4>${body}</section>`;
+    const row=(l,v)=>`<div class="flex justify-between gap-3 py-2 text-sm"><dt class="text-slate-500">${l}</dt><dd class="text-slate-800 font-medium text-right break-words">${v}</dd></div>`;
+
+    function drawerHtml(s){
+      const sch=schedule(s);
+      const STATE={Completed:'bg-emerald-100 text-emerald-700','In Progress':'bg-amber-100 text-amber-700',Upcoming:'bg-slate-100 text-slate-600'};
+      return `
+      <div class="sticky top-0 z-10 bg-white border-b border-slate-200 p-4 flex items-center gap-3">
+        ${avatar(s,'w-12 h-12')}
+        <div class="min-w-0 flex-1"><h3 class="font-semibold text-slate-800 truncate">${esc(s.name)}</h3><div class="flex flex-wrap gap-1.5 mt-1">${roleBadge(s.role)}${statusBadge(s.status)}</div></div>
+        <button id="drvEdit" type="button" class="px-3 h-9 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50">Edit</button>
+        <button id="drvClose" type="button" class="w-8 h-8 grid place-items-center rounded-full text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close">&times;</button>
+      </div>
+      <div class="p-4 space-y-4">
+        ${section('Personal info',`<dl class="divide-y divide-slate-100">
+          ${row('Phone',esc(s.mobile))}${row('Email',esc(s.email))}
+          ${row('Joined',`${fmtDate(s.join)} <span class="text-slate-400 font-normal">· ${tenure(s.join)}</span>`)}
+          ${row('Commission',s.comm+'%')}${row('Rating',ratingHtml(s))}</dl>`)}
+
+        ${section('Working hours',`
+          <div class="flex flex-wrap gap-1.5 mb-2">${DAYS.map((d,i)=>`<span class="px-2.5 py-1 rounded-lg text-xs font-medium ${s.days.includes(i)?'bg-teal-600 text-white':'bg-slate-100 text-slate-400'}">${d}</span>`).join('')}</div>
+          <p class="text-sm text-slate-600">${daysText(s.days)} · ${fmtTime(s.from)} – ${fmtTime(s.to)}</p>`)}
+
+        ${section('Skills & services',s.skills.length
+          ?`<div class="flex flex-wrap gap-2">${s.skills.map(x=>`<span class="px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-medium">${esc(x)}</span>`).join('')}</div>`
+          :'<p class="text-sm text-slate-400">No service specialization (non-service role).</p>')}
+
+        ${section('Monthly revenue',`<div class="h-48"><canvas id="drvChart"></canvas></div>`)}
+
+        ${section("Today's schedule",sch.note?`<p class="text-sm text-slate-500">${sch.note}</p>`
+          :`<ul class="space-y-2.5">${sch.items.map(a=>`<li class="flex items-center gap-3 text-sm">
+              <span class="w-20 shrink-0 text-slate-500 text-xs font-medium">${fmtTime(a.time)}</span>
+              <span class="flex-1 min-w-0"><span class="block text-slate-800 truncate">${esc(a.customer)}</span><span class="block text-xs text-slate-500 truncate">${esc(a.service)}</span></span>
+              <span class="badge ${STATE[a.state]}">${a.state}</span></li>`).join('')}</ul>`)}
+
+        ${section('Recent customer reviews',`<ul class="space-y-3">${reviewsOf(s).map(r=>`<li class="text-sm">
+            <div class="flex items-center justify-between gap-2"><span class="font-medium text-slate-800">${esc(r.customer)}</span>${stars(r.rating)}</div>
+            <p class="text-xs text-slate-400">${esc(r.service)} · ${fmtDate(r.date)}</p>
+            <p class="mt-1 text-slate-600">“${esc(r.comment)}”</p></li>`).join('')}</ul>`)}
+      </div>`;
+    }
+
+    function openDrawer(id){
+      const s=list.find(x=>x.id===id);if(!s)return;
+      drvId=id;
+      $('drawer').innerHTML=drawerHtml(s);
+      $('drvOv').classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      requestAnimationFrame(()=>$('drawer').classList.remove('translate-x-full'));
+      if(drvChart)drvChart.destroy();
+      drvChart=new Chart($('drvChart'),{type:'bar',
+        data:{labels:revenueTrend.labels,datasets:[{data:monthly(s),backgroundColor:'#0d9488',borderRadius:6,maxBarThickness:36}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtINR(c.parsed.y)}}},
+          scales:{y:{beginAtZero:true,ticks:{callback:k},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+      $('drvClose').onclick=closeDrawer;
+      $('drvEdit').onclick=()=>openModal(s);
+      $('drvClose').focus();
+    }
+    function closeDrawer(){
+      $('drawer').classList.add('translate-x-full');$('drvOv').classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');drvId=null;
+      if(drvChart){drvChart.destroy();drvChart=null}
+    }
+    $('drvOv').addEventListener('click',closeDrawer);
+
+    /* =========================================================
+       ADD / EDIT OVERLAY FORM
+       ========================================================= */
+    let editing=null,lastFocus=null;
+    const chip=(id,label,checked)=>`<label class="cursor-pointer"><input type="checkbox" class="sr-only peer" value="${esc(id)}" ${checked?'checked':''}>
+      <span class="inline-flex items-center h-9 px-3.5 rounded-full border border-slate-300 text-xs font-medium text-slate-600 transition peer-hover:border-teal-400 peer-checked:bg-teal-600 peer-checked:border-teal-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 select-none">${esc(label)}</span></label>`;
+    const checkedVals=box=>[...$(box).querySelectorAll('input:checked')].map(i=>i.value);
+    // show/clear inline error; also marks the related control(s)
+    const FIELD={name:['f_name'],phone:['f_phone'],email:['f_email'],join:['f_join'],comm:['f_comm'],time:['f_from','f_to'],days:[]};
+    const err=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);(FIELD[id]||[]).forEach(f=>{$(f).classList.toggle('err',!!m);$(f).setAttribute('aria-invalid',m?'true':'false')});return !m};
+
+    function openModal(s){
+      editing=s||null;lastFocus=document.activeElement;
+      $('mTitle').textContent=s?'Edit Staff':'Add Staff';
+      $('mSave').textContent=s?'Save Changes':'Add Staff';
+      const d=s||{name:'',mobile:'',email:'',role:'Therapist',join:new Date().toISOString().slice(0,10),comm:10,status:'Available',from:'10:00',to:'19:00',days:[0,1,2,3,4,5],skills:[]};
+      $('f_name').value=d.name;$('f_phone').value=d.mobile;$('f_email').value=d.email||'';$('f_role').value=d.role;
+      $('f_join').value=d.join;$('f_comm').value=d.comm;$('f_status').value=d.status;$('f_from').value=d.from;$('f_to').value=d.to;
+      $('f_days').innerHTML=DAYS.map((x,i)=>chip(i,x,d.days.includes(i))).join('');
+      $('f_skills').innerHTML=svcNames.map(x=>chip(x,x,d.skills.includes(x))).join('');
+      Object.keys(FIELD).forEach(i=>err(i,''));
+      $('modalOv').classList.remove('hidden');document.body.classList.add('overflow-hidden');
+      setTimeout(()=>$('f_name').focus(),30);
+    }
+    const closeModal=()=>{$('modalOv').classList.add('hidden');if(!drvId)document.body.classList.remove('overflow-hidden');if(lastFocus&&lastFocus.focus)lastFocus.focus()};
+    $('addBtn').onclick=()=>openModal(null);
+    $('mX').onclick=$('mCancel').onclick=closeModal;
+    $('modalOv').addEventListener('mousedown',e=>{if(e.target===$('modalOv'))closeModal()});
+    // Phone: digits only; clear a field's error as soon as the user edits it
+    $('f_phone').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,10)});
+    [['f_name','name'],['f_phone','phone'],['f_email','email'],['f_join','join'],['f_comm','comm'],['f_from','time'],['f_to','time']].forEach(([f,e])=>$(f).addEventListener('input',()=>err(e,'')));
+    $('f_days').addEventListener('change',()=>err('days',''));
+
+    $('form').addEventListener('submit',e=>{
+      e.preventDefault();
+      const v={name:$('f_name').value.trim(),phone:$('f_phone').value.trim(),email:$('f_email').value.trim(),join:$('f_join').value,
+               comm:$('f_comm').value,from:$('f_from').value,to:$('f_to').value,days:checkedVals('f_days').map(Number)};
+      const checks=[
+        ['name',v.name.length<2?'Enter the full name':''],
+        ['phone',!/^[6-9]\d{9}$/.test(v.phone)?'Enter a valid 10-digit Indian mobile number':''],
+        ['email',!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)?'Enter a valid email address':''],
+        ['join',!v.join?'Choose a joining date':''],
+        ['comm',v.comm===''||+v.comm<0||+v.comm>100?'Enter a value between 0 and 100':''],
+        ['time',!v.from||!v.to||v.to<=v.from?'Shift end must be after shift start':''],
+        ['days',!v.days.length?'Select at least one working day':'']
+      ];
+      const results=checks.map(([id,m])=>err(id,m));
+      if(!results.every(Boolean)){const bad=checks.find(([,m])=>m);const f=(FIELD[bad[0]]||[])[0];if(f)$(f).focus();return}
+
+      const data={name:v.name,mobile:v.phone,email:v.email,role:$('f_role').value,join:v.join,comm:+v.comm,status:$('f_status').value,
+                  from:v.from,to:v.to,days:v.days.sort((a,b)=>a-b),skills:checkedVals('f_skills')};
+      const wasEditing=!!editing;
+      if(editing){Object.assign(editing,data);toast(`${data.name} updated`)}
+      else{list.push({id:Math.max(0,...list.map(x=>x.id))+1,rating:0,svc:0,cust:0,rev:0,...data});toast(`${data.name} added to the team`)}
+      closeModal();renderTeam();
+      if(!$('panelPerf').classList.contains('hidden'))renderPerf();
+      if(drvId&&wasEditing)openDrawer(drvId);
+      editing=null;
+    });
+
+    /* =========================================================
+       PERFORMANCE TAB — sortable, paginated table + chart
+       ========================================================= */
+    const COLS=[
+      ['name','Staff',false,s=>`<div class="flex items-center gap-2.5">${avatar(s,'w-8 h-8 text-xs')}<div class="min-w-0"><p class="font-medium text-slate-800 truncate">${esc(s.name)}</p><p class="text-xs text-slate-500">${s.role}</p></div></div>`],
+      ['svc','Services performed',true,s=>s.svc],
+      ['rev','Revenue',true,s=>fmtINR(s.rev)],
+      ['cust','Customers',true,s=>s.cust],
+      ['rating','Avg rating',true,s=>s.rating?`<span class="inline-flex items-center gap-1.5">${stars(s.rating)}<span class="text-slate-700">${s.rating.toFixed(1)}</span></span>`:'<span class="text-slate-400">—</span>'],
+      ['commission','Commission earned',true,s=>fmtINR(commissionOf(s))]
+    ];
+    let sort={key:'rev',dir:'desc'},perfPage=1,perfSize=+$('pgSize').value;
+    const sortVal=(s,key)=>key==='commission'?commissionOf(s):s[key];
+
+    function pageList(cur,total){
+      if(total<=7)return Array.from({length:total},(_,i)=>i+1);
+      const s=new Set([1,total,cur-1,cur,cur+1]);const a=[...s].filter(p=>p>=1&&p<=total).sort((x,y)=>x-y),out=[];
+      a.forEach((p,i)=>{if(i&&p-a[i-1]>1)out.push('…');out.push(p)});return out}
+    function renderPager(total){
+      const pages=Math.max(1,Math.ceil(total/perfSize)),from=total?(perfPage-1)*perfSize+1:0,to=Math.min(perfPage*perfSize,total);
+      $('pager').innerHTML=`<span class="text-sm text-slate-500">Showing ${from}–${to} of ${total}</span>
+        <div class="flex items-center gap-1.5">
+          <button type="button" class="pg-btn" data-p="${perfPage-1}" ${perfPage<=1?'disabled':''} aria-label="Previous page">‹ Prev</button>
+          ${pageList(perfPage,pages).map(p=>p==='…'?'<span class="px-1 text-slate-400">…</span>':`<button type="button" class="pg-btn ${p===perfPage?'active':''}" data-p="${p}" ${p===perfPage?'aria-current="page"':''}>${p}</button>`).join('')}
+          <button type="button" class="pg-btn" data-p="${perfPage+1}" ${perfPage>=pages?'disabled':''} aria-label="Next page">Next ›</button>
+        </div>`;
+    }
+    $('pager').addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b||b.disabled)return;perfPage=+b.dataset.p;renderPerf()});
+    $('pgSize').addEventListener('change',e=>{perfSize=+e.target.value;perfPage=1;renderPerf()});
+
+    function renderPerf(){
+      $('perfHead').innerHTML=COLS.map(([key,label,num])=>{
+        const on=sort.key===key,arrow=on?(sort.dir==='asc'?'▲':'▼'):'↕';
+        return `<th scope="col" aria-sort="${on?(sort.dir==='asc'?'ascending':'descending'):'none'}" class="px-4 py-3 font-semibold ${num?'text-right':'text-left'}">
+          <button type="button" data-sort="${key}" class="inline-flex items-center gap-1 uppercase tracking-wide hover:text-teal-700 ${on?'text-teal-700':''}">${label}<span class="text-[10px] ${on?'':'opacity-40'}">${arrow}</span></button></th>`}).join('');
+      const rows=[...list].sort((a,b)=>{
+        const x=sortVal(a,sort.key),y=sortVal(b,sort.key);
+        const c=typeof x==='string'?x.localeCompare(y):x-y;return sort.dir==='asc'?c:-c});
+      const pages=Math.max(1,Math.ceil(rows.length/perfSize));if(perfPage>pages)perfPage=pages;
+      const pageRows=rows.slice((perfPage-1)*perfSize,perfPage*perfSize);
+      $('perfBody').innerHTML=pageRows.map(s=>`<tr class="hover:bg-slate-50 cursor-pointer transition-colors" data-id="${s.id}">${COLS.map(([,,num,fn])=>`<td class="px-4 py-3 ${num?'text-right tabular-nums':''} text-slate-700">${fn(s)}</td>`).join('')}</tr>`).join('');
+      const tot=f=>list.reduce((a,s)=>a+f(s),0),rated=list.filter(s=>s.rating);
+      $('perfFoot').innerHTML=`<tr><td class="px-4 py-3">Team total</td><td class="px-4 py-3 text-right tabular-nums">${tot(s=>s.svc)}</td><td class="px-4 py-3 text-right tabular-nums">${fmtINR(tot(s=>s.rev))}</td>
+        <td class="px-4 py-3 text-right tabular-nums">${tot(s=>s.cust)}</td><td class="px-4 py-3 text-right tabular-nums">${rated.length?(rated.reduce((a,s)=>a+s.rating,0)/rated.length).toFixed(1):'—'}</td>
+        <td class="px-4 py-3 text-right tabular-nums">${fmtINR(tot(commissionOf))}</td></tr>`;
+      renderPager(rows.length);
+      // Chart shows the whole team in table sort order
+      if(perfChart)perfChart.destroy();
+      perfChart=new Chart($('perfChart'),{type:'bar',
+        data:{labels:rows.map(s=>s.name.split(' ')[0]),datasets:[{label:'Revenue',data:rows.map(s=>s.rev),backgroundColor:rows.map(s=>s.rev?'#0d9488':'#cbd5e1'),borderRadius:6,maxBarThickness:48}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>rows[i[0].dataIndex].name,label:c=>fmtINR(c.parsed.y)}}},
+          scales:{y:{beginAtZero:true,ticks:{callback:k},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+    }
+    $('perfHead').addEventListener('click',e=>{
+      const b=e.target.closest('[data-sort]');if(!b)return;
+      const key=b.dataset.sort;
+      sort=sort.key===key?{key,dir:sort.dir==='asc'?'desc':'asc'}:{key,dir:key==='name'?'asc':'desc'};
+      perfPage=1;renderPerf();
+    });
+    $('perfBody').addEventListener('click',openFromCard);
+
+    /* =========================================================
+       TABS + global keys
+       ========================================================= */
+    function showTab(t){
+      const perf=t==='perf';
+      $('panelTeam').classList.toggle('hidden',perf);$('panelPerf').classList.toggle('hidden',!perf);
+      [['tabTeam',!perf],['tabPerf',perf]].forEach(([id,on])=>{
+        const b=$(id);b.setAttribute('aria-selected',on);
+        b.className='px-4 py-1.5 rounded-lg font-medium transition '+(on?'bg-white text-teal-700 shadow-sm':'text-slate-600 hover:text-slate-800');
+      });
+      $('q').parentElement.classList.toggle('hidden',perf);$('roleFilter').classList.toggle('hidden',perf);
+      if(perf)renderPerf();
+    }
+    $('tabTeam').onclick=()=>showTab('team');
+    $('tabPerf').onclick=()=>showTab('perf');
+    document.addEventListener('keydown',e=>{
+      if(e.key!=='Escape')return;
+      if(!$('modalOv').classList.contains('hidden'))closeModal();else if(drvId)closeDrawer();
+    });
+
+    showTab('team');renderTeam();
+  })();
+  </script>
+</body>
+</html>

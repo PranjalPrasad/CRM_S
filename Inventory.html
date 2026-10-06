@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventory · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="inventory" data-title="Inventory">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Alert banner (low stock / expiring) -->
+      <section id="alert"></section>
+
+      <!-- Summary cards -->
+      <section id="summary" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></section>
+
+      <!-- Tabs + primary action (label changes per tab) -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="tabs" class="inline-flex flex-wrap p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
+          <button data-t="stock" class="px-3.5 py-1 rounded-lg">Stock</button><button data-t="purchase" class="px-3.5 py-1 rounded-lg">Purchase entry</button>
+          <button data-t="usage" class="px-3.5 py-1 rounded-lg">Usage log</button><button data-t="sales" class="px-3.5 py-1 rounded-lg">Product sales</button>
+        </div>
+        <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+      </div>
+
+      <!-- STOCK TAB -->
+      <section id="t_stock" class="space-y-3">
+        <div class="card p-3 flex flex-wrap gap-2.5">
+          <input id="q" type="search" placeholder="Search product or supplier…" class="flex-1 min-w-[12rem] px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none">
+          <select id="fCat" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white"></select>
+        </div>
+        <div class="card overflow-hidden"><div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Product</th><th>Category</th><th>Supplier</th>
+            <th class="ta-r">Stock</th><th class="ta-r">Min level</th><th>Unit</th><th>Expiry</th><th>Status</th><th class="ta-r">Action</th></tr></thead>
+          <tbody id="stockRows"></tbody></table></div>
+          <div id="pg_stock" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+
+      <!-- PURCHASE TAB -->
+      <section id="t_purchase" class="space-y-3 hidden">
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Recent purchases</h3><p class="card-sub">Newest first</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Date</th><th>Product</th><th>Supplier</th><th>Invoice</th><th class="ta-r">Qty</th><th class="ta-r">Price</th><th class="ta-r">Total</th></tr></thead>
+          <tbody id="purRows"></tbody></table></div>
+          <div id="pg_purchase" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+
+      <!-- USAGE TAB -->
+      <section id="t_usage" class="space-y-3 hidden">
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Usage log</h3><p class="card-sub">Newest first</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Date</th><th>Product</th><th class="ta-r">Qty used</th><th>Service</th><th>Staff</th></tr></thead>
+          <tbody id="useRows"></tbody></table></div>
+          <div id="pg_usage" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+
+      <!-- SALES TAB -->
+      <section id="t_sales" class="space-y-3 hidden">
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Sales history</h3><p class="card-sub">Newest first</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Date</th><th>Customer</th><th>Product</th><th class="ta-r">Qty</th><th class="ta-r">Price</th><th class="ta-r">Total</th></tr></thead>
+          <tbody id="saleRows"></tbody></table></div>
+          <div id="pg_sales" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Reusable overlay (Add Product / Purchase / Usage / Sale) -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full max-w-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="text-sm p-5"></div>
+      <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <datalist id="custList"></datalist><datalist id="supList"></datalist><datalist id="catList"></datalist>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <!-- Compatibility + seed data: adds helpers, categories/units/cost and purchase/usage/sales history if data.js lacks them -->
+  <script>
+  (function(){
+    const has=n=>{try{return (0,eval)('typeof '+n)!=='undefined'}catch(e){return false}};
+    const def=(n,v)=>{if(!has(n))window[n]=v};
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    def('addDaysISO',(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))});
+    def('esc',s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+    def('fmtDate',d=>d&&d!=='—'?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—');
+    def('fmtINR',n=>'₹'+Number(n).toLocaleString('en-IN'));
+    def('customers',[]);def('services',[]);def('kpis',{});
+    if(!has('therapists'))window.therapists=['Deepak Yadav','Lakshmi Narayan','Farah Shaikh'];
+    if(!has('products'))window.products=[];
+    // Enrich products (only once): category, unit, cost, min level and relative expiry dates
+    const T=addDaysISO(new Date().toISOString().slice(0,10),0);
+    const cat=['Hair Care','Massage Oils','Skin Care','Hair Care','Nails','Skin Care','Body Care','Hair Care','Waxing','Skin Care','Consumables','Massage Oils'];
+    const unit=['bottle','bottle','bottle','bottle','bottle','pcs','jar','tube','pack','jar','pack','bottle'];
+    const exp=[400,200,300,200,500,20,10,-5,365,28,700,45], stk={4:0};
+    products.forEach((p,i)=>{
+      if(p.cost!=null)return;
+      p.category=cat[i]||'General';p.unit=unit[i]||'pcs';p.price=p.price||Math.round((p.stock+5)*40);p.cost=Math.round(p.price*.6);
+      p.reorderLevel=p.reorderLevel||10;p.expiry=addDaysISO(T,exp[i]??180);if(i in stk)p.stock=stk[i];
+    });
+    window.purchases=[[0,20,420,'INV-2201',-12],[1,30,780,'INV-2202',-9],[3,12,450,'INV-2210',-5],[8,25,240,'INV-2214',-2]].map((r,i)=>({id:i+1,date:addDaysISO(T,r[4]),product:products[r[0]].name,supplier:products[r[0]].supplier,qty:r[1],price:r[2],invoice:r[3]}));
+    window.usageLog=[[1,2,0,-6],[5,1,4,-5],[0,1,3,-4],[6,1,7,-3],[2,3,2,-2],[8,2,5,-1]].map((r,i)=>({id:i+1,date:addDaysISO(T,r[3]),product:products[r[0]].name,qty:r[1],service:services[r[2]]?services[r[2]].name:'Facial',staff:therapists[i%therapists.length]}));
+    window.productSales=[[0,1,-7],[2,2,-4],[5,1,-3],[9,1,-1]].map((r,i)=>({id:i+1,date:addDaysISO(T,r[2]),customer:(customers[i*4]||{name:'Walk-in'}).name,product:products[r[0]].name,qty:r[1],price:products[r[0]].price,total:r[1]*products[r[0]].price}));
+  })();
+  </script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;           // layout.js redirects to login
+    const $=id=>document.getElementById(id);
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0);
+    const pg={stock:1,purchase:1,usage:1,sales:1};        // current page per table
+    const size={stock:5,purchase:5,usage:5,sales:5};       // rows per page per table (user can change)
+    let tab='stock',tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2800)};
+    const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
+    const prod=id=>products.find(p=>p.id==id);
+    const daysTo=d=>Math.round((new Date(d)-new Date(TODAY))/864e5);
+
+    // ---------- Status logic (computed every render, so all updates reflect instantly) ----------
+    const statusOf=p=>p.stock<=0?'Out of Stock':daysTo(p.expiry)<0?'Expired':p.stock<=p.reorderLevel?'Low Stock':daysTo(p.expiry)<=30?'Expiring Soon':'In Stock';
+    const BADGE={'In Stock':'badge badge-active','Low Stock':'badge badge-lost','Out of Stock':'badge bg-rose-600 text-white','Expiring Soon':'badge badge-vip','Expired':'badge bg-slate-700 text-white'};
+    const isLow=p=>p.stock<=p.reorderLevel, isSoon=p=>{const d=daysTo(p.expiry);return d>=0&&d<=30};
+
+    // ---------- Form helpers ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white text-sm';
+    const F=(id,l,ctl)=>`<div><label class="font-medium text-slate-700 text-sm" for="${id}">${l}</label>${ctl}<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`;
+    const I=(id,t='text',x='')=>`<input id="${id}" type="${t}" ${x} class="${inp}">`;
+    const SEL=(id,o=[])=>`<select id="${id}" class="${inp}">${o.map(v=>`<option>${esc(v)}</option>`).join('')}</select>`;
+    const PSEL=id=>`<select id="${id}" class="${inp}">${products.map(p=>`<option value="${p.id}">${esc(p.name)} (${p.stock} ${esc(p.unit)})</option>`).join('')}</select>`;
+    const val=id=>$(id).value.trim();
+    const bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    const G='grid sm:grid-cols-2 gap-3';
+
+    // ---------- Overlay ----------
+    let ovSubmit=null;
+    const closeOv=()=>$('ov').classList.add('hidden');
+    const openOv=(title,label,body,fn,init)=>{
+      $('ovTitle').textContent=title;$('ovSubmit').textContent=label;$('ovBody').innerHTML=body;ovSubmit=fn;
+      $('ov').classList.remove('hidden');if(init)init();
+      const f=$('ovBody').querySelector('input,select');if(f)f.focus();
+    };
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+
+    // ---------- Pagination (always visible, per-table page size) ----------
+    function paged(key,arr){
+      const n=arr.length,sz=size[key],pages=Math.max(1,Math.ceil(n/sz));
+      pg[key]=Math.min(Math.max(1,pg[key]),pages);
+      const c=pg[key],s=(c-1)*sz,e=Math.min(s+sz,n);
+      const b=(l,p,on,dis,t)=>`<button type="button" data-pg="${key}:${p}" ${dis?'disabled':''} title="${t||'Page '+p}" class="min-w-[2rem] h-8 px-2.5 rounded-lg border text-xs transition ${on?'bg-teal-600 text-white border-teal-600 font-semibold':'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'} ${dis?'opacity-40 cursor-not-allowed hover:bg-white':''}">${l}</button>`;
+      const st=Math.max(1,Math.min(c-2,pages-4)),en=Math.min(pages,st+4);
+      let nums='';for(let i=st;i<=en;i++)nums+=b(i,i,i===c);
+      $('pg_'+key).innerHTML=`<div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div class="flex flex-wrap items-center gap-4"><span>${n?`Showing <b class="text-slate-700">${s+1}–${e}</b> of <b class="text-slate-700">${n}</b>`:'No records'}</span>
+          <label class="flex items-center gap-1.5">Rows per page <select data-ps="${key}" class="px-2 py-1 rounded-lg border border-slate-300 bg-white text-xs">${[5,10,20,50].map(v=>`<option ${v===sz?'selected':''}>${v}</option>`).join('')}</select></label></div>
+        <div class="flex items-center gap-1">${b('«',1,false,c===1,'First page')}${b('‹',c-1,false,c===1,'Previous page')}${nums}${b('›',c+1,false,c===pages,'Next page')}${b('»',pages,false,c===pages,'Last page')}</div></div>`;
+      return arr.slice(s,e);
+    }
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(!b||b.disabled)return;const[k,p]=b.dataset.pg.split(':');pg[k]=+p;render()});
+    document.addEventListener('change',e=>{const t=e.target.closest('[data-ps]');if(!t)return;size[t.dataset.ps]=+t.value;pg[t.dataset.ps]=1;render()});
+
+    // ---------- Render everything ----------
+    const ADD={stock:'+ Add product',purchase:'+ Add purchase',usage:'+ Add usage',sales:'+ Record sale'};
+    function render(){
+      const low=products.filter(isLow),soon=products.filter(isSoon),exp=products.filter(p=>daysTo(p.expiry)<0);
+      const card=(l,v,sub,c='text-slate-800')=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold ${c} mt-0.5 truncate">${v}</p><p class="text-xs text-slate-400 mt-0.5">${sub}</p></div>`;
+      $('summary').innerHTML=card('Total products',products.length,[...new Set(products.map(p=>p.category))].length+' categories')+card('Low stock items',low.length,'at or below min level','text-rose-600')+card('Expiring soon (30 days)',soon.length,'use or discount first','text-amber-600')+card('Stock value',fmtINR(products.reduce((a,p)=>a+p.stock*p.cost,0)),'at purchase cost','text-teal-700');
+      kpis.lowStockItems=low.length;
+      const names=a=>a.slice(0,4).map(p=>esc(p.name)).join(', ')+(a.length>4?` +${a.length-4} more`:'');
+      const parts=[low.length&&`<b>${low.length} low / out of stock:</b> ${names(low)}`,soon.length&&`<b>${soon.length} expiring within 30 days:</b> ${names(soon)}`,exp.length&&`<b>${exp.length} expired:</b> ${names(exp)}`].filter(Boolean);
+      $('alert').innerHTML=parts.length?`<div class="rounded-xl border border-amber-300 bg-amber-50 text-amber-900 px-4 py-2.5 text-sm flex gap-3 items-start"><span class="text-base leading-5">⚠</span><div class="space-y-0.5">${parts.map(x=>`<p>${x}</p>`).join('')}</div></div>`:'';
+
+      document.querySelectorAll('#tabs button').forEach(b=>b.className='px-3.5 py-1 rounded-lg transition '+(b.dataset.t===tab?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100'));
+      ['stock','purchase','usage','sales'].forEach(t=>$('t_'+t).classList.toggle('hidden',t!==tab));
+      $('addBtn').textContent=ADD[tab];
+
+      // Stock table with filters
+      const cats=[...new Set(products.map(p=>p.category))].sort(),cv=$('fCat').value;
+      $('fCat').innerHTML='<option value="">All categories</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');$('fCat').value=cats.includes(cv)?cv:'';
+      $('catList').innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+      $('supList').innerHTML=[...new Set(products.map(p=>p.supplier))].map(s=>`<option value="${esc(s)}">`).join('');
+      $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+      const q=$('q').value.toLowerCase(),fc=$('fCat').value;
+      const sRows=paged('stock',products.filter(p=>(!fc||p.category===fc)&&(p.name+' '+p.supplier).toLowerCase().includes(q)));
+      $('stockRows').innerHTML=sRows.map(p=>{
+        const s=statusOf(p),tone=isLow(p)||s==='Expired'?'bg-rose-50/60':s==='Expiring Soon'?'bg-amber-50':'';
+        return `<tr class="${tone}"><td class="font-medium text-slate-800">${esc(p.name)}</td><td>${esc(p.category)}</td><td>${esc(p.supplier)}</td>
+          <td class="ta-r font-semibold text-slate-800">${p.stock}</td><td class="ta-r text-slate-500">${p.reorderLevel}</td><td>${esc(p.unit)}</td>
+          <td>${fmtDate(p.expiry)}</td><td><span class="${BADGE[s]}">${s}</span></td>
+          <td class="ta-r">${isLow(p)?`<button data-re="${p.id}" class="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold transition">Reorder</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="9" class="!py-8 text-center text-slate-400">No products found.</td></tr>';
+
+      // History tables (newest first, paginated)
+      const R=(key,a,f,n)=>paged(key,[...a].sort((x,y)=>y.date.localeCompare(x.date)||y.id-x.id)).map(f).join('')||`<tr><td colspan="${n}" class="!py-8 text-center text-slate-400">Nothing recorded yet.</td></tr>`;
+      $('purRows').innerHTML=R('purchase',purchases,x=>`<tr><td>${fmtDate(x.date)}</td><td class="font-medium text-slate-800">${esc(x.product)}</td><td>${esc(x.supplier)}</td><td>${esc(x.invoice)}</td><td class="ta-r">${x.qty}</td><td class="ta-r">${fmtINR(x.price)}</td><td class="ta-r font-semibold text-slate-800">${fmtINR(x.qty*x.price)}</td></tr>`,7);
+      $('useRows').innerHTML=R('usage',usageLog,x=>`<tr><td>${fmtDate(x.date)}</td><td class="font-medium text-slate-800">${esc(x.product)}</td><td class="ta-r">${x.qty}</td><td>${esc(x.service)}</td><td>${esc(x.staff)}</td></tr>`,5);
+      $('saleRows').innerHTML=R('sales',productSales,x=>`<tr><td>${fmtDate(x.date)}</td><td>${esc(x.customer)}</td><td class="font-medium text-slate-800">${esc(x.product)}</td><td class="ta-r">${x.qty}</td><td class="ta-r">${fmtINR(x.price)}</td><td class="ta-r font-semibold text-slate-800">${fmtINR(x.total)}</td></tr>`,6);
+    }
+
+    // ---------- Overlay forms ----------
+    // Purchase entry: increases stock
+    function openPurchase(p){
+      const fill=pr=>{$('p_sup').value=pr.supplier;$('p_price').value=pr.cost};
+      openOv('New purchase entry','Add purchase',
+        `<div class="${G}">${F('p_prod','Product',PSEL('p_prod'))}${F('p_sup','Supplier',I('p_sup','text','list="supList"'))}${F('p_qty','Quantity',I('p_qty','number','min="1"'))}${F('p_price','Purchase price (₹ per unit)',I('p_price','number','min="0" step="0.01"'))}${F('p_inv','Invoice no.',I('p_inv'))}${F('p_date','Purchase date',I('p_date','date'))}${F('p_exp','Expiry date (optional)',I('p_exp','date'))}</div>`,
+        ()=>{
+          const pr=prod(val('p_prod')),q=+val('p_qty'),price=+val('p_price');
+          let ok=bad('p_sup',val('p_sup')?'':'Enter the supplier.');ok=bad('p_qty',q>=1?'':'Quantity must be at least 1.')&&ok;ok=bad('p_price',price>0?'':'Enter the purchase price.')&&ok;
+          ok=bad('p_inv',val('p_inv')?'':'Enter the invoice number.')&&ok;ok=bad('p_date',val('p_date')?'':'Choose the purchase date.')&&ok;
+          ok=bad('p_exp',!val('p_exp')||val('p_exp')>val('p_date')?'':'Expiry must be after the purchase date.')&&ok;if(!ok)return false;
+          pr.stock+=q;pr.cost=price;pr.supplier=val('p_sup');if(val('p_exp'))pr.expiry=val('p_exp');
+          purchases.push({id:nextId(purchases),date:val('p_date'),product:pr.name,supplier:pr.supplier,qty:q,price,invoice:val('p_inv')});
+          pg.purchase=1;render();toast(`+${q} ${pr.unit} added · ${pr.name} stock is now ${pr.stock}`);
+        },
+        ()=>{
+          $('p_date').value=TODAY;if(p)$('p_prod').value=p.id;fill(prod($('p_prod').value));
+          if(p)$('p_qty').value=Math.max(1,p.reorderLevel*2-p.stock);
+          $('p_prod').onchange=()=>fill(prod($('p_prod').value));
+        });
+    }
+    // Usage: reduces stock
+    function openUsage(){
+      openOv('Add usage','Add usage',
+        `<div class="${G}">${F('u_prod','Product',PSEL('u_prod'))}${F('u_qty','Quantity used',I('u_qty','number','min="1"'))}${F('u_svc','Service',SEL('u_svc',services.map(s=>s.name)))}${F('u_staff','Staff',SEL('u_staff',therapists))}${F('u_date','Date',I('u_date','date'))}</div>`,
+        ()=>{
+          const p=prod(val('u_prod')),q=+val('u_qty');
+          let ok=bad('u_qty',q<1?'Quantity must be at least 1.':q>p.stock?`Only ${p.stock} ${p.unit} in stock.`:'');ok=bad('u_date',val('u_date')?'':'Choose a date.')&&ok;if(!ok)return false;
+          p.stock-=q;usageLog.push({id:nextId(usageLog),date:val('u_date'),product:p.name,qty:q,service:val('u_svc'),staff:val('u_staff')});
+          pg.usage=1;render();toast(`${q} ${p.unit} used · ${p.name} stock is now ${p.stock}`);
+        },()=>{$('u_date').value=TODAY});
+    }
+    // Retail sale: reduces stock
+    function openSale(){
+      openOv('Retail sale','Record sale',
+        `<div class="${G}">${F('s_cust','Customer',I('s_cust','text','list="custList" placeholder="Name or Walk-in"'))}${F('s_prod','Product',PSEL('s_prod'))}${F('s_qty','Quantity',I('s_qty','number','min="1"'))}${F('s_price','Selling price (₹ per unit)',I('s_price','number','min="0"'))}${F('s_date','Date',I('s_date','date'))}</div>`,
+        ()=>{
+          const p=prod(val('s_prod')),q=+val('s_qty'),pr=+val('s_price');
+          let ok=bad('s_cust',val('s_cust')?'':'Enter a customer name (or Walk-in).');ok=bad('s_qty',q<1?'Quantity must be at least 1.':q>p.stock?`Only ${p.stock} ${p.unit} in stock.`:'')&&ok;ok=bad('s_price',pr>0?'':'Enter the selling price.')&&ok;ok=bad('s_date',val('s_date')?'':'Choose a date.')&&ok;if(!ok)return false;
+          p.stock-=q;productSales.push({id:nextId(productSales),date:val('s_date'),customer:val('s_cust'),product:p.name,qty:q,price:pr,total:q*pr});
+          pg.sales=1;render();toast(`Sold ${q} × ${p.name} · ${fmtINR(q*pr)}`);
+        },()=>{
+          $('s_date').value=TODAY;$('s_price').value=products[0]?prod($('s_prod').value).price:'';
+          $('s_prod').onchange=()=>$('s_price').value=prod($('s_prod').value).price;
+        });
+    }
+    // Add Product
+    function openProduct(){
+      openOv('Add product','Add product',
+        `<div class="${G}">${F('a_name','Product name',I('a_name'))}${F('a_cat','Category',I('a_cat','text','list="catList"'))}${F('a_sup','Supplier',I('a_sup','text','list="supList"'))}${F('a_unit','Unit',SEL('a_unit',['bottle','pcs','pack','jar','tube','litre','kg']))}
+        ${F('a_stock','Opening stock',I('a_stock','number','min="0"'))}${F('a_min','Minimum stock level',I('a_min','number','min="0"'))}${F('a_cost','Purchase cost (₹)',I('a_cost','number','min="0"'))}${F('a_price','Retail price (₹)',I('a_price','number','min="0"'))}${F('a_exp','Expiry date',I('a_exp','date'))}</div>`,
+        ()=>{
+          const n=val('a_name'),num=id=>val(id)===''?NaN:+val(id);
+          let ok=bad('a_name',!n?'Enter the product name.':products.some(p=>p.name.toLowerCase()===n.toLowerCase())?'This product already exists.':'');
+          ok=bad('a_cat',val('a_cat')?'':'Enter a category.')&&ok;ok=bad('a_sup',val('a_sup')?'':'Enter a supplier.')&&ok;
+          [['a_stock','opening stock'],['a_min','minimum level'],['a_cost','purchase cost'],['a_price','retail price']].forEach(([id,l])=>ok=bad(id,num(id)>=0?'':`Enter ${l} (0 or more).`)&&ok);
+          ok=bad('a_exp',val('a_exp')?'':'Choose an expiry date.')&&ok;if(!ok)return false;
+          products.push({id:nextId(products),name:n,category:val('a_cat'),supplier:val('a_sup'),unit:val('a_unit'),stock:num('a_stock'),reorderLevel:num('a_min'),cost:num('a_cost'),price:num('a_price'),expiry:val('a_exp')});
+          render();toast(`${n} added to inventory`);
+        });
+    }
+
+    // ---------- Events ----------
+    $('tabs').onclick=e=>{const b=e.target.closest('button[data-t]');if(b){tab=b.dataset.t;render()}};
+    $('q').oninput=$('fCat').onchange=()=>{pg.stock=1;render()};
+    $('addBtn').onclick=()=>({stock:openProduct,purchase:()=>openPurchase(),usage:openUsage,sales:openSale})[tab]();
+    $('stockRows').onclick=e=>{const b=e.target.closest('[data-re]');if(!b)return;
+      tab='purchase';render();openPurchase(prod(b.dataset.re))};
+    render();
+  })();
+  </script>
+</body>
+</html>

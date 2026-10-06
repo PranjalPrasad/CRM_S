@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Services & Packages · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="services" data-title="Services & Packages">
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+      <!-- Summary -->
+      <section id="summary" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></section>
+
+      <!-- Tabs + primary action -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="tabs" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
+          <button data-t="services" class="px-4 py-1 rounded-lg">Services</button><button data-t="packages" class="px-4 py-1 rounded-lg">Packages</button>
+        </div>
+        <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+      </div>
+
+      <!-- Services tab -->
+      <section id="pSvc" class="space-y-3">
+        <div id="chips" class="flex flex-wrap gap-1.5"></div>
+        <div class="card overflow-hidden"><div class="overflow-x-auto">
+          <table class="data-table"><thead><tr><th>Service</th><th>Category</th><th>Duration</th><th class="ta-r">Price</th><th>Status</th><th class="ta-r">Actions</th></tr></thead>
+          <tbody id="svcRows"></tbody></table></div></div>
+      </section>
+
+      <!-- Packages tab -->
+      <section id="pPkg" class="space-y-4 hidden">
+        <div id="pkgGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Recent package sales</h3><p class="card-sub">Latest 6 sales</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table"><thead><tr><th>Customer</th><th>Package</th><th>Valid</th><th class="ta-r">Paid</th><th>Mode</th></tr></thead><tbody id="saleRows"></tbody></table></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Reusable overlay form -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="text-sm p-5"></div>
+      <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <datalist id="custList"></datalist>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;
+    const $=id=>document.getElementById(id);
+    let tab='services', cat='All', tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
+    const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
+    const svcPrice=n=>(services.find(s=>s.name===n)||{price:0}).price;
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0), MONTH=new Date().toISOString().slice(0,7);
+    $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+
+    // ---------- Overlay + form helpers ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white';
+    const F=(id,l,ctl,req)=>`<div><label class="font-medium text-slate-700" for="${id}">${l}${req?' *':''}</label>${ctl}<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`;
+    const I=(id,t='text',x='')=>`<input id="${id}" type="${t}" ${x} class="${inp}">`;
+    const S=(id,o,ph)=>`<select id="${id}" class="${inp}">${ph?`<option value="">${ph}</option>`:''}${o.map(v=>`<option>${esc(v)}</option>`).join('')}</select>`;
+    const T=id=>`<textarea id="${id}" rows="2" class="${inp}"></textarea>`;
+    const val=id=>$(id).value.trim();
+    const bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    let ovSubmit=null;
+    function modal({title,html,submit='Save',danger=false,wide=true,onSubmit}){
+      $('ovTitle').textContent=title;$('ovBody').innerHTML=html;$('ovForm').style.maxWidth=wide?'38rem':'26rem';ovSubmit=onSubmit;
+      $('ovSubmit').textContent=submit;$('ovSubmit').className=(danger?'bg-rose-600 hover:bg-rose-700 text-white rounded-[.625rem] px-4 py-2 font-semibold':'btn-primary')+' text-sm';
+      $('ov').classList.remove('hidden');
+    }
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+    const icon=(p,label,hover,attrs)=>`<button ${attrs} title="${label}" aria-label="${label}" class="p-1.5 rounded-lg text-slate-500 transition ${hover}"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg></button>`;
+    const EDIT='M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z', DEL='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
+
+    // ---------- Render ----------
+    function render(){
+      const sold=packageSales.filter(s=>s.date.startsWith(MONTH));
+      const card=(l,v,sub)=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold text-slate-800 mt-0.5 truncate">${v}</p><p class="text-xs text-slate-400 mt-0.5">${sub}</p></div>`;
+      $('summary').innerHTML=card('Total services',services.length,services.filter(s=>s.active).length+' active')+card('Active packages',packages.filter(p=>p.status==='Active').length,packages.length+' in total')+
+        card('Packages sold this month',sold.length,'since 1st of the month')+card('Package revenue',fmtINR(sold.reduce((a,s)=>a+s.price,0)),'this month');
+      document.querySelectorAll('#tabs button').forEach(b=>b.className='px-4 py-1 rounded-lg transition '+(b.dataset.t===tab?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100'));
+      $('pSvc').classList.toggle('hidden',tab!=='services');$('pPkg').classList.toggle('hidden',tab!=='packages');
+      $('addBtn').textContent=tab==='services'?'+ Add service':'+ Add package';
+      // Services
+      $('chips').innerHTML=['All',...SERVICE_CATS].map(c=>`<button data-c="${c}" class="px-3 py-0.5 rounded-full text-xs font-medium border transition ${c===cat?'bg-teal-600 border-teal-600 text-white':'border-slate-300 text-slate-600 hover:bg-slate-50'}">${c} (${c==='All'?services.length:services.filter(s=>s.category===c).length})</button>`).join('');
+      const rows=services.filter(s=>cat==='All'||s.category===cat);
+      $('svcRows').innerHTML=rows.map(s=>`<tr data-id="${s.id}"><td><p class="font-medium text-slate-800">${esc(s.name)}</p><p class="text-xs text-slate-500 truncate max-w-xs">${esc(s.description)}</p></td>
+        <td><span class="badge badge-inactive">${s.category}</span></td><td>${s.duration} min</td><td class="ta-r font-semibold text-slate-800">${fmtINR(s.price)}</td>
+        <td><button data-tog title="${s.active?'Active':'Inactive'}" role="switch" aria-checked="${s.active}" aria-label="Toggle ${esc(s.name)}" class="relative block w-9 h-5 rounded-full transition ${s.active?'bg-teal-600':'bg-slate-300'}"><span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${s.active?'left-[18px]':'left-0.5'}"></span></button></td>
+        <td class="ta-r">${icon(EDIT,'Edit service','hover:bg-slate-100 hover:text-slate-800','data-edit')}${icon(DEL,'Delete service','hover:bg-rose-50 hover:text-rose-600','data-del')}</td></tr>`).join('')
+        ||'<tr><td colspan="6" class="!py-8 text-center text-slate-500">No services in this category yet. Use "Add service" to create one.</td></tr>';
+      // Packages
+      $('pkgGrid').innerHTML=packages.map(p=>{const list=p.items.reduce((a,i)=>a+i.qty*svcPrice(i.service),0);return `<div class="card card-hover p-4 flex flex-col" data-id="${p.id}">
+        <div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="font-semibold text-slate-800 truncate">${esc(p.name)}</h3><span class="badge ${p.status==='Active'?'badge-active':'badge-inactive'} mt-1">${p.status}</span></div>
+          <div class="flex shrink-0 -mr-1.5">${icon(EDIT,'Edit package','hover:bg-slate-100','data-edit')}${icon(DEL,'Delete package','hover:bg-rose-50 hover:text-rose-600','data-del')}</div></div>
+        <ul class="mt-3 text-sm text-slate-600 space-y-1 flex-1">${p.items.map(i=>`<li class="flex justify-between gap-2"><span class="truncate">${esc(i.service)}</span><span class="text-slate-400 shrink-0">× ${i.qty}</span></li>`).join('')}</ul>
+        <div class="grid grid-cols-3 gap-2 text-center text-xs text-slate-500 mt-3 py-2.5 border-y border-slate-100"><div><p class="text-sm font-semibold text-slate-800">${p.sessions}</p>sessions</div><div><p class="text-sm font-semibold text-slate-800">${p.discount}%</p>discount</div><div><p class="text-sm font-semibold text-slate-800">${p.validityDays}</p>days valid</div></div>
+        <div class="flex items-center justify-between mt-3"><div><p class="text-lg font-bold text-slate-800">${fmtINR(p.price)}</p>${list>p.price?`<p class="text-xs text-slate-400 line-through">${fmtINR(list)}</p>`:''}</div>
+          <button data-sell class="btn-primary text-sm !py-1.5" ${p.status!=='Active'?'disabled style="opacity:.5;cursor:not-allowed"':''}>Sell package</button></div></div>`}).join('');
+      $('saleRows').innerHTML=[...packageSales].reverse().slice(0,6).map(s=>`<tr><td class="font-medium text-slate-800">${esc(s.customer)}</td><td>${esc(s.package)}</td><td class="text-slate-500">${fmtDate(s.start)} to ${fmtDate(s.expiry)}</td><td class="ta-r font-semibold text-slate-800">${fmtINR(s.price)}</td><td>${s.mode}</td></tr>`).join('')
+        ||'<tr><td colspan="5" class="!py-8 text-center text-slate-500">No package sales yet.</td></tr>';
+    }
+    $('tabs').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.t;render()}};
+    $('chips').onclick=e=>{const b=e.target.closest('[data-c]');if(b){cat=b.dataset.c;render()}};
+    $('addBtn').onclick=()=>tab==='services'?svcForm():pkgForm();
+
+    // ---------- Services CRUD ----------
+    function svcForm(s){
+      modal({title:s?'Edit service':'Add service',submit:s?'Save changes':'Add service',html:`<div class="grid sm:grid-cols-2 gap-3">${F('f_name','Service name',I('f_name'),1)}${F('f_cat','Category',S('f_cat',SERVICE_CATS,'Select…'),1)}
+        ${F('f_dur','Duration (minutes)',I('f_dur','number','min="5" step="5"'),1)}${F('f_price','Price (₹)',I('f_price','number','min="0"'),1)}
+        <div class="sm:col-span-2">${F('f_desc','Description',T('f_desc'))}</div><div class="sm:col-span-2">${F('f_use','Product consumption notes',T('f_use'))}</div></div>`,
+        onSubmit(){
+          let ok=bad('f_name',val('f_name')?'':'Enter the service name.');
+          ok=bad('f_cat',val('f_cat')?'':'Choose a category.')&&ok;
+          ok=bad('f_dur',+val('f_dur')>0?'':'Enter the duration in minutes.')&&ok;
+          ok=bad('f_price',val('f_price')!==''&&+val('f_price')>=0?'':'Enter the price.')&&ok; if(!ok)return false;
+          const d={name:val('f_name'),category:val('f_cat'),duration:+val('f_dur'),price:+val('f_price'),description:val('f_desc'),consumption:val('f_use')};
+          if(s){Object.assign(s,d);toast('Service updated')}else{services.push({id:nextId(services),active:true,...d});toast('Service added')} render();
+        }});
+      if(s){$('f_name').value=s.name;$('f_cat').value=s.category;$('f_dur').value=s.duration;$('f_price').value=s.price;$('f_desc').value=s.description||'';$('f_use').value=s.consumption||''}
+    }
+    $('svcRows').onclick=e=>{
+      const tr=e.target.closest('tr[data-id]');if(!tr)return;const s=services.find(x=>x.id===+tr.dataset.id);
+      if(e.target.closest('[data-tog]')){s.active=!s.active;render();toast(`${s.name} is now ${s.active?'active':'inactive'}`)}
+      else if(e.target.closest('[data-edit]'))svcForm(s);
+      else if(e.target.closest('[data-del]')){
+        const used=packages.find(p=>p.items.some(i=>i.service===s.name));
+        if(used)return toast(`Can't delete: ${s.name} is part of "${used.name}". Remove it from the package first.`);
+        modal({title:'Delete service',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete ${esc(s.name)}? This can't be undone in this session.</p>`,onSubmit(){services.splice(services.indexOf(s),1);render();toast('Service deleted')}});
+      }
+    };
+
+    // ---------- Packages CRUD ----------
+    function pkgForm(p){
+      modal({title:p?'Edit package':'Add package',submit:p?'Save changes':'Add package',html:`<div class="space-y-3">${F('p_name','Package name',I('p_name'),1)}
+        <div><p class="font-medium text-slate-700">Included services *</p><div class="mt-1 max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">${services.map(s=>`<label class="flex items-center gap-3 px-3 py-1.5 hover:bg-slate-50 cursor-pointer"><input type="checkbox" data-s="${esc(s.name)}" class="rounded border-slate-300 text-teal-600"><span class="flex-1 min-w-0 truncate">${esc(s.name)} <span class="text-slate-400">${fmtINR(s.price)}</span></span><input type="number" min="1" value="1" data-q class="w-14 px-2 py-0.5 rounded border border-slate-300 text-center" aria-label="Sessions"></label>`).join('')}</div><p id="e_p_items" class="text-xs text-rose-600 mt-1 hidden"></p></div>
+        <div class="grid grid-cols-3 gap-3">${F('p_disc','Discount %',I('p_disc','number','min="0" max="90"'))}${F('p_days','Validity (days)',I('p_days','number','min="1"'),1)}${F('p_status','Status',S('p_status',['Active','Inactive']))}</div>
+        <div class="bg-teal-50 rounded-lg px-3 py-2 text-teal-800" id="p_calc"></div></div>`,
+        onSubmit(){
+          const items=pickItems(); let ok=bad('p_name',val('p_name')?'':'Enter the package name.');
+          ok=bad('p_items',items.length?'':'Select at least one service.')&&ok; ok=bad('p_days',+val('p_days')>=1?'':'Enter the validity in days.')&&ok; if(!ok)return false;
+          const d={name:val('p_name'),items,includes:items.map(i=>i.qty>1?`${i.service} x${i.qty}`:i.service),sessions:items.reduce((a,i)=>a+i.qty,0),discount:+val('p_disc')||0,validityDays:+val('p_days'),status:val('p_status'),price:calc(items).pay};
+          if(p){Object.assign(p,d);toast('Package updated')}else{packages.push({id:nextId(packages),...d});toast('Package added')} render();
+        }});
+      const pickItems=()=>[...document.querySelectorAll('#ovBody [data-s]:checked')].map(c=>({service:c.dataset.s,qty:Math.max(1,+c.closest('label').querySelector('[data-q]').value||1)}));
+      const calc=items=>{const list=items.reduce((a,i)=>a+i.qty*svcPrice(i.service),0);return{list,pay:Math.round(list*(1-Math.min(90,Math.max(0,+val('p_disc')||0))/100))}};
+      const upd=()=>{const c=calc(pickItems());$('p_calc').textContent=`List price ${fmtINR(c.list)} → package price ${fmtINR(c.pay)}`};
+      $('ovBody').oninput=$('ovBody').onchange=upd;
+      $('p_disc').value=p?p.discount:10;$('p_days').value=p?p.validityDays:60;$('p_status').value=p?p.status:'Active';
+      if(p){$('p_name').value=p.name;p.items.forEach(i=>{const c=document.querySelector(`#ovBody [data-s="${CSS.escape(i.service)}"]`);if(c){c.checked=true;c.closest('label').querySelector('[data-q]').value=i.qty}})}
+      upd();
+    }
+    $('pkgGrid').onclick=e=>{
+      const card=e.target.closest('[data-id]');if(!card)return;const p=packages.find(x=>x.id===+card.dataset.id);
+      if(e.target.closest('[data-edit]'))pkgForm(p);
+      else if(e.target.closest('[data-del]'))modal({title:'Delete package',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete the ${esc(p.name)} package? Past sales stay in the list.</p>`,onSubmit(){packages.splice(packages.indexOf(p),1);render();toast('Package deleted')}});
+      else if(e.target.closest('[data-sell]'))sellForm(p);
+    };
+
+    // ---------- Sell package ----------
+    function sellForm(pre){
+      const active=packages.filter(p=>p.status==='Active');
+      modal({title:'Sell package',submit:'Confirm sale',html:`<div class="grid sm:grid-cols-2 gap-3">
+        <div class="sm:col-span-2">${F('s_cust','Customer',`<input id="s_cust" list="custList" placeholder="Type to search customers" autocomplete="off" class="${inp}">`,1)}</div>
+        <div class="sm:col-span-2">${F('s_pkg','Package',S('s_pkg',active.map(p=>p.name),'Select…'),1)}</div>
+        ${F('s_start','Start date',I('s_start','date'),1)}${F('s_exp','Expiry date',`<input id="s_exp" readonly class="${inp} bg-slate-50">`)}
+        ${F('s_disc','Additional discount %',I('s_disc','number','min="0" max="100"'))}${F('s_mode','Payment mode',S('s_mode',['UPI','Card','Cash']),1)}
+        <div class="sm:col-span-2 flex items-center justify-between bg-teal-50 rounded-lg px-4 py-2.5"><span class="text-teal-800">Amount payable</span><span id="s_pay" class="text-lg font-bold text-teal-800"></span></div></div>`,
+        onSubmit(){
+          const p=packages.find(x=>x.name===val('s_pkg'));
+          let ok=bad('s_cust',customers.some(c=>c.name===val('s_cust'))?'':'Pick a customer from the list.');
+          ok=bad('s_pkg',p?'':'Choose a package.')&&ok; ok=bad('s_start',val('s_start')?'':'Choose a start date.')&&ok; if(!ok)return false;
+          const pay=amount(p);
+          packageSales.push({id:nextId(packageSales),customer:val('s_cust'),package:p.name,start:val('s_start'),expiry:val('s_exp')&&addDaysISO(val('s_start'),p.validityDays),price:pay,mode:val('s_mode'),date:TODAY});
+          render();toast(`Sale confirmed: ${p.name} for ${val('s_cust')} · ${fmtINR(pay)}`);
+        }});
+      const cur=()=>packages.find(x=>x.name===val('s_pkg'));
+      const amount=p=>p?Math.round(p.price*(1-Math.min(100,Math.max(0,+val('s_disc')||0))/100)):0;
+      const upd=()=>{const p=cur();$('s_exp').value=p&&val('s_start')?fmtDate(addDaysISO(val('s_start'),p.validityDays)):'';$('s_pay').textContent=fmtINR(amount(p))};
+      $('ovBody').oninput=$('ovBody').onchange=upd;
+      $('s_start').value=TODAY;$('s_disc').value=0; if(pre&&pre.status==='Active')$('s_pkg').value=pre.name; upd();
+    }
+    render();
+  })();
+  </script>
+</body>
+</html>

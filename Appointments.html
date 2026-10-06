@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appointments · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="appointments" data-title="Appointments">
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Header: view toggle + new appointment -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div><h2 class="text-xl font-bold text-slate-800">Appointments</h2><p id="rangeLabel" class="text-sm text-slate-500"></p></div>
+        <div class="flex items-center gap-2.5">
+          <div id="viewToggle" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
+            <button data-v="day" class="px-3.5 py-1 rounded-lg">Day</button><button data-v="week" class="px-3.5 py-1 rounded-lg">Week</button><button data-v="list" class="px-3.5 py-1 rounded-lg">List</button>
+          </div>
+          <button id="newBtn" class="btn-primary text-sm !py-2">+ New appointment</button>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card p-3 flex flex-wrap items-center gap-2.5 text-sm">
+        <select id="fTh" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white"><option value="">All therapists</option></select>
+        <select id="fSvc" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white"><option value="">All services</option></select>
+        <select id="fSt" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white"><option value="">All statuses</option></select>
+        <div id="dateNav" class="flex items-center gap-1 ml-auto">
+          <button id="prev" class="w-8 h-8 rounded-lg border border-slate-300 hover:bg-slate-50 transition" aria-label="Previous">&lsaquo;</button>
+          <button id="todayBtn" class="px-3 h-8 rounded-lg border border-slate-300 hover:bg-slate-50 transition">Today</button>
+          <button id="next" class="w-8 h-8 rounded-lg border border-slate-300 hover:bg-slate-50 transition" aria-label="Next">&rsaquo;</button>
+          <input id="datePick" type="date" class="ml-1 h-8 px-2.5 rounded-lg border border-slate-300">
+        </div>
+      </div>
+
+      <div class="flex flex-col xl:flex-row gap-4 items-start">
+        <section id="view" class="card w-full xl:flex-1 min-w-0 overflow-hidden"></section>
+        <!-- Right summary -->
+        <aside class="w-full xl:w-64 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3 shrink-0">
+          <div class="card p-4"><h3 class="card-title">Today</h3><p id="todayText" class="text-xs text-slate-500 mb-3"></p><div id="summary" class="space-y-2.5"></div></div>
+          <div class="card p-4 text-sm space-y-2"><h3 class="card-title mb-1">Colour key</h3>
+            <p class="flex items-center"><span class="inline-block w-3 h-3 rounded bg-blue-400 mr-2"></span>Booked / Confirmed</p><p class="flex items-center"><span class="inline-block w-3 h-3 rounded bg-emerald-500 mr-2"></span>Completed</p>
+            <p class="flex items-center"><span class="inline-block w-3 h-3 rounded bg-rose-400 mr-2"></span>Cancelled</p><p class="flex items-center"><span class="inline-block w-3 h-3 rounded bg-slate-400 mr-2"></span>No-show</p></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <!-- Reusable overlay -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <div id="ovBox" class="bg-white rounded-xl mx-auto my-8 p-5 shadow-xl w-full max-w-lg">
+      <div class="flex items-center justify-between mb-3"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody"></div>
+    </div>
+  </div>
+  <datalist id="custList"></datalist>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;
+    const $=id=>document.getElementById(id);
+    const ROW=40, START=540, END=1260;                       // grid: 9 AM–9 PM, 40px per 30 min
+    const pad=n=>String(n).padStart(2,'0');
+    const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+    const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+    const monday=s=>{const d=parse(s);return addDays(s,-((d.getDay()+6)%7))};
+    const toMin=t=>{const[h,m]=t.split(':').map(Number);return h*60+m};
+    const t12=m=>{const h=Math.floor(m/60),mm=pad(m%60);return `${h%12||12}:${mm} ${h<12?'AM':'PM'}`};
+    const TODAY=iso(new Date()), SLOTS=Array.from({length:24},(_,i)=>`${pad(9+(i>>1))}:${i%2?'30':'00'}`);
+    const STATUSES=['Booked','Confirmed','Completed','Cancelled','No-show'];
+    const svc=n=>services.find(s=>s.name===n)||{duration:60,price:0};
+    appointments.forEach(a=>{const s=svc(a.service);a.duration??=s.duration;a.price??=s.price;a.notes??=''});
+    let view='week', date=TODAY, tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
+    const COLOR={Booked:'bg-blue-100 border-blue-500 text-blue-900',Confirmed:'bg-blue-100 border-blue-500 text-blue-900',Completed:'bg-emerald-100 border-emerald-500 text-emerald-900',Cancelled:'bg-rose-100 border-rose-400 text-rose-800 opacity-70','No-show':'bg-slate-200 border-slate-400 text-slate-700'};
+    const BADGE={Booked:'badge-new',Confirmed:'badge-new',Completed:'badge-active',Cancelled:'badge-lost','No-show':'badge-inactive'};
+    const isLive=a=>a.status==='Booked'||a.status==='Confirmed';
+
+    // ---------- Filters ----------
+    $('fTh').insertAdjacentHTML('beforeend',therapists.map(t=>`<option>${t}</option>`).join(''));
+    $('fSvc').insertAdjacentHTML('beforeend',services.map(s=>`<option>${s.name}</option>`).join(''));
+    $('fSt').insertAdjacentHTML('beforeend',STATUSES.map(s=>`<option>${s}</option>`).join(''));
+    $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+    const list=()=>appointments.filter(a=>(!$('fTh').value||a.staff===$('fTh').value)&&(!$('fSvc').value||a.service===$('fSvc').value)&&(!$('fSt').value||a.status===$('fSt').value));
+
+    // ---------- Overlay ----------
+    const openOv=(title,html,wide)=>{$('ovTitle').textContent=title;$('ovBody').innerHTML=html;$('ovBox').style.maxWidth=wide?'36rem':'28rem';$('ov').classList.remove('hidden')};
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=closeOv; $('ov').onmousedown=e=>{if(e.target===$('ov'))closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+
+    // ---------- Grid ----------
+    // Side-by-side layout for overlapping appointments in one column
+    function layout(items){
+      const ev=items.map(a=>({a,s:toMin(a.time),e:toMin(a.time)+a.duration})).sort((x,y)=>x.s-y.s||x.e-y.e);
+      let cl=[],cEnd=0; const flush=()=>{const n=Math.max(...cl.map(x=>x.l))+1;cl.forEach(x=>x.n=n)};
+      ev.forEach(x=>{ if(cl.length&&x.s>=cEnd){flush();cl=[];cEnd=0}
+        const used=cl.filter(c=>c.e>x.s).map(c=>c.l);let l=0;while(used.includes(l))l++;x.l=l;cl.push(x);cEnd=Math.max(cEnd,x.e)});
+      if(cl.length)flush(); return ev;
+    }
+    function grid(cols){ // cols: [{head,sub,today,date,th,items}]
+      const H=(END-START)/30*ROW, cw=cols.length>5?110:140, tpl=`grid-template-columns:56px repeat(${cols.length},minmax(${cw}px,1fr))`;
+      const lines=`background-image:repeating-linear-gradient(to bottom,#e2e8f0 0,#e2e8f0 1px,transparent 1px,transparent ${ROW}px)`;
+      return `<div class="overflow-x-auto"><div style="min-width:${56+cols.length*cw}px">
+        <div class="grid border-b border-slate-200 bg-slate-50 text-sm" style="${tpl}"><div></div>${cols.map(c=>`<div class="px-2 py-2 text-center ${c.today?'bg-teal-50 text-teal-800 font-semibold':'text-slate-600'}"><div class="font-medium leading-tight">${c.head}</div><div class="text-xs text-slate-400">${c.sub||''}</div></div>`).join('')}</div>
+        <div class="grid overflow-y-auto" style="${tpl};max-height:600px">
+          <div class="relative" style="height:${H}px">${Array.from({length:12},(_,i)=>`<span class="absolute right-2 text-[11px] text-slate-400" style="top:${i*2*ROW+2}px">${t12(START+i*60)}</span>`).join('')}</div>
+          ${cols.map(c=>`<div class="relative border-l border-slate-100 cursor-pointer" data-slot data-date="${c.date}" data-th="${c.th||''}" style="height:${H}px;${lines}">
+            ${layout(c.items).map(x=>`<button data-id="${x.a.id}" class="absolute rounded-md border-l-4 px-1.5 py-1 text-left text-[11px] leading-tight overflow-hidden hover:shadow-md transition ${COLOR[x.a.status]}"
+              style="top:${(Math.max(x.s,START)-START)/30*ROW+1}px;height:${Math.max(24,(Math.min(x.e,END)-Math.max(x.s,START))/30*ROW-2)}px;left:calc(${x.l/x.n*100}% + 1px);width:calc(${100/x.n}% - 3px)">
+              <b class="block truncate">${esc(x.a.customer)}</b><span class="block truncate">${esc(x.a.service)}</span><span class="block truncate opacity-75">${t12(x.s)}${view==='week'?' · '+esc(x.a.staff.split(' ')[0]):''}</span></button>`).join('')}</div>`).join('')}
+        </div></div></div>`;
+    }
+    function listView(){
+      const rows=list().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+      return `<div class="overflow-x-auto"><table class="data-table"><thead><tr>${['Date','Time','Customer','Service','Therapist','Duration','Price','Status'].map((h,i)=>`<th class="${i===6?'ta-r':''}">${h}</th>`).join('')}</tr></thead><tbody>
+        ${rows.map(a=>`<tr data-id="${a.id}" class="cursor-pointer"><td>${fmtDate(a.date)}</td><td>${t12(toMin(a.time))}</td><td class="font-medium text-slate-800">${esc(a.customer)}</td><td>${esc(a.service)}</td><td class="text-slate-500">${esc(a.staff)}</td><td>${a.duration} min</td><td class="ta-r font-semibold text-slate-800">${fmtINR(a.price)}</td><td><span class="badge ${BADGE[a.status]}">${a.status}</span></td></tr>`).join('')
+        ||'<tr><td colspan="8" class="!py-8 text-center text-slate-500">No appointments match these filters.</td></tr>'}</tbody></table></div>`;
+    }
+
+    // ---------- Render ----------
+    function render(){
+      document.querySelectorAll('#viewToggle button').forEach(b=>b.className='px-3.5 py-1 rounded-lg transition '+(b.dataset.v===view?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100'));
+      $('dateNav').style.display=view==='list'?'none':''; $('datePick').value=date;
+      const items=list();
+      if(view==='week'){
+        const m=monday(date), days=Array.from({length:7},(_,i)=>addDays(m,i));
+        $('rangeLabel').textContent=`${fmtDate(days[0])} to ${fmtDate(days[6])}`;
+        $('view').innerHTML=grid(days.map(d=>({head:parse(d).toLocaleDateString('en-IN',{weekday:'short'}),sub:parse(d).getDate()+' '+parse(d).toLocaleDateString('en-IN',{month:'short'}),today:d===TODAY,date:d,items:items.filter(a=>a.date===d)})));
+      }else if(view==='day'){
+        const ths=$('fTh').value?[$('fTh').value]:therapists;
+        $('rangeLabel').textContent=parse(date).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+        $('view').innerHTML=grid(ths.map(t=>({head:t,sub:'Therapist',today:false,date,th:t,items:items.filter(a=>a.date===date&&a.staff===t)})));
+      }else{ $('rangeLabel').textContent=`${items.length} appointments`; $('view').innerHTML=listView(); }
+      // Today's summary (always real today, ignores filters)
+      const td=appointments.filter(a=>a.date===TODAY), n=f=>td.filter(f).length;
+      $('todayText').textContent=fmtDate(TODAY)+` · ${td.length} total`;
+      $('summary').innerHTML=[['Booked',n(isLive),'bg-blue-500'],['Completed',n(a=>a.status==='Completed'),'bg-emerald-500'],['Cancelled',n(a=>a.status==='Cancelled'),'bg-rose-500']]
+        .map(([l,v,c])=>`<div class="flex items-center justify-between"><span class="flex items-center gap-2 text-sm text-slate-600"><span class="w-2.5 h-2.5 rounded-full ${c}"></span>${l}</span><span class="text-lg font-bold text-slate-800">${v}</span></div>`).join('');
+    }
+    $('viewToggle').onclick=e=>{const b=e.target.closest('button');if(b){view=b.dataset.v;render()}};
+    ['fTh','fSvc','fSt'].forEach(i=>$(i).onchange=render);
+    const step=n=>{date=addDays(date,n*(view==='week'?7:1));render()};
+    $('prev').onclick=()=>step(-1);$('next').onclick=()=>step(1);$('todayBtn').onclick=()=>{date=TODAY;render()};
+    $('datePick').onchange=e=>{if(e.target.value){date=e.target.value;render()}};
+
+    // ---------- Slot form (booking + reschedule) ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white text-sm';
+    const lbl=(id,t)=>`<label class="text-sm font-medium text-slate-700" for="${id}">${t}</label>`;
+    const err=id=>`<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p>`;
+    const slotHtml=()=>`<div>${lbl('s_th','Therapist *')}<select id="s_th" class="${inp}">${therapists.map(t=>`<option>${t}</option>`).join('')}</select></div>
+      <div class="grid grid-cols-2 gap-3"><div>${lbl('s_date','Date *')}<input id="s_date" type="date" class="${inp}">${err('date')}</div>
+      <div>${lbl('s_time','Time *')}<select id="s_time" class="${inp}">${SLOTS.map(s=>`<option value="${s}">${t12(toMin(s))}</option>`).join('')}</select></div></div>
+      <div id="warn" class="hidden text-sm bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-3 py-2"></div>`;
+    function conflict(th,d,time,dur,skip){
+      const s=toMin(time),e=s+dur;
+      return appointments.find(a=>a.id!==skip&&a.staff===th&&a.date===d&&isLive(a)&&toMin(a.time)<e&&toMin(a.time)+a.duration>s);
+    }
+    let acked=false;
+    function watchConflict(getDur,skip){
+      const check=()=>{acked=false;$('ovSubmit').textContent=$('ovSubmit').dataset.label;
+        const c=$('s_date').value&&conflict($('s_th').value,$('s_date').value,$('s_time').value,getDur(),skip);
+        $('warn').classList.toggle('hidden',!c);
+        if(c)$('warn').textContent=`${$('s_th').value} is already booked at ${t12(toMin(c.time))} for ${c.customer} (${c.service}). You can still continue.`;return c};
+      ['s_th','s_date','s_time'].forEach(i=>$(i).onchange=check); return check;
+    }
+    // Wraps a form: validate -> conflict warning (needs 2nd click) -> save
+    function bindForm(label,skip,getDur,validate,save){
+      $('ovSubmit').dataset.label=label; const check=watchConflict(getDur,skip);
+      $('ovForm').onsubmit=e=>{e.preventDefault(); if(!validate())return;
+        if(check()&&!acked){acked=true;$('ovSubmit').textContent='Book anyway';return}
+        closeOv();save()};
+    }
+    const formFoot=(label,cls='btn-primary')=>`<div class="flex justify-end gap-2 pt-1"><button type="button" onclick="document.getElementById('ov').classList.add('hidden')" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50">Close</button><button id="ovSubmit" class="${cls} text-sm">${label}</button></div>`;
+
+    // ---------- New appointment ----------
+    function newAppt(pre={}){
+      openOv('New appointment',`<form id="ovForm" novalidate class="space-y-3">
+        <div>${lbl('b_cust','Customer *')}<input id="b_cust" list="custList" placeholder="Type to search customers" autocomplete="off" class="${inp}">${err('cust')}</div>
+        <div>${lbl('b_svc','Service *')}<select id="b_svc" class="${inp}"><option value="">Select…</option>${services.map(s=>`<option>${s.name}</option>`).join('')}</select>${err('svc')}
+          <p id="svcInfo" class="text-xs text-slate-500 mt-1"></p></div>
+        ${slotHtml()}
+        <div>${lbl('b_notes','Notes')}<textarea id="b_notes" rows="2" class="${inp}"></textarea></div>
+        <label class="flex items-center gap-2 text-sm text-slate-600"><input id="b_send" type="checkbox" checked class="rounded border-slate-300 text-teal-600">Send confirmation to customer</label>
+        ${formFoot('Book appointment')}</form>`,true);
+      $('s_th').value=pre.th||therapists[0]; $('s_date').value=pre.date||date; if(pre.time)$('s_time').value=pre.time;
+      const dur=()=>svc($('b_svc').value).duration;
+      $('b_svc').addEventListener('change',()=>{const s=services.find(x=>x.name===$('b_svc').value);$('svcInfo').textContent=s?`${s.duration} min · ${fmtINR(s.price)}`:''});
+      const setErr=(k,m)=>{const e=$('e_'+k);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+      bindForm('Book appointment',0,dur,()=>{
+        let ok=setErr('cust',customers.some(c=>c.name===$('b_cust').value.trim())?'':'Pick a customer from the list.');
+        ok=setErr('svc',$('b_svc').value?'':'Choose a service.')&&ok; ok=setErr('date',$('s_date').value?'':'Choose a date.')&&ok; return ok;
+      },()=>{
+        const s=svc($('b_svc').value), c=$('b_cust').value.trim();
+        appointments.push({id:Math.max(0,...appointments.map(a=>a.id))+1,customer:c,service:$('b_svc').value,staff:$('s_th').value,date:$('s_date').value,time:$('s_time').value,status:'Booked',duration:s.duration,price:s.price,notes:$('b_notes').value.trim()});
+        date=$('s_date').value; render(); toast('Appointment booked'+($('b_send').checked?' · confirmation sent to '+c:''));
+      });
+    }
+    $('newBtn').onclick=()=>newAppt();
+
+    // ---------- Details / actions ----------
+    const byId=id=>appointments.find(a=>a.id===+id);
+    function details(id){
+      const a=byId(id), live=isLive(a);
+      const r=(l,v)=>`<div><dt class="text-xs text-slate-500">${l}</dt><dd class="text-sm font-medium text-slate-800 mt-0.5">${esc(v)}</dd></div>`;
+      const ob='px-3.5 py-1.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 transition';
+      openOv('Appointment details',`<div class="flex items-center justify-between mb-3"><p class="text-base font-semibold text-slate-800">${esc(a.customer)}</p><span class="badge ${BADGE[a.status]}">${a.status}</span></div>
+        <dl class="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 border border-slate-100 p-3">${r('Service',a.service)}${r('Therapist',a.staff)}${r('Date',fmtDate(a.date))}${r('Time',t12(toMin(a.time))+' · '+a.duration+' min')}${r('Price',fmtINR(a.price))}${r('Notes',a.notes||'—')}${a.cancelReason?r('Cancel reason',a.cancelReason):''}</dl>
+        <div class="flex flex-wrap gap-2 mt-4" id="actions">
+          ${live?'<button data-do="done" class="btn-primary text-sm !py-1.5">Mark completed</button>':''}
+          ${a.status!=='Completed'?`<button data-do="resched" class="${ob}">Reschedule</button>`:''}
+          ${live?'<button data-do="cancel" class="px-3.5 py-1.5 rounded-lg border border-rose-300 text-sm font-medium text-rose-600 hover:bg-rose-50 transition">Cancel</button>':''}
+          <a href="billing.html?appointment=${a.id}" class="${ob}">Create invoice</a></div>`,true);
+      $('actions').onclick=e=>{const d=e.target.dataset.do;if(!d)return;
+        if(d==='done'){a.status='Completed';closeOv();render();toast('Marked as completed')}
+        if(d==='resched')reschedule(a); if(d==='cancel')cancelAppt(a)};
+    }
+    function reschedule(a){
+      openOv('Reschedule',`<form id="ovForm" novalidate class="space-y-3"><p class="text-sm text-slate-500">${esc(a.customer)} · ${esc(a.service)} (${a.duration} min)</p>${slotHtml()}${formFoot('Save new time')}</form>`);
+      $('s_th').value=a.staff;$('s_date').value=a.date;$('s_time').value=a.time;
+      const setErr=m=>{const e=$('e_date');e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+      bindForm('Save new time',a.id,()=>a.duration,()=>setErr($('s_date').value?'':'Choose a date.'),()=>{
+        Object.assign(a,{staff:$('s_th').value,date:$('s_date').value,time:$('s_time').value}); if(!isLive(a))a.status='Booked';
+        date=a.date;render();toast('Rescheduled to '+fmtDate(a.date)+' at '+t12(toMin(a.time)));});
+    }
+    function cancelAppt(a){
+      openOv('Cancel appointment',`<form id="ovForm" novalidate class="space-y-3"><p class="text-sm text-slate-600">Cancel ${esc(a.customer)}'s ${esc(a.service)} on ${fmtDate(a.date)}?</p>
+        <div>${lbl('c_reason','Reason *')}<textarea id="c_reason" rows="3" class="${inp}" placeholder="e.g. Customer is unwell"></textarea>${err('reason')}</div>${formFoot('Cancel appointment','bg-rose-600 hover:bg-rose-700 text-white rounded-[.625rem] px-4 py-2 font-semibold')}</form>`);
+      $('ovForm').onsubmit=e=>{e.preventDefault();const v=$('c_reason').value.trim();
+        $('e_reason').textContent=v?'':'Enter a reason for cancelling.';$('e_reason').classList.toggle('hidden',!!v);if(!v)return;
+        a.status='Cancelled';a.cancelReason=v;closeOv();render();toast('Appointment cancelled')};
+    }
+
+    // Clicks: block or list row -> details; empty grid slot -> prefilled booking
+    $('view').onclick=e=>{
+      const b=e.target.closest('[data-id]'); if(b)return details(b.dataset.id);
+      const col=e.target.closest('[data-slot]'); if(!col)return;
+      const m=Math.min(END-30,START+Math.floor((e.clientY-col.getBoundingClientRect().top)/ROW)*30);
+      newAppt({date:col.dataset.date,th:col.dataset.th||undefined,time:`${pad(Math.floor(m/60))}:${pad(m%60)}`});
+    };
+    render();
+  })();
+  </script>
+</body>
+</html>

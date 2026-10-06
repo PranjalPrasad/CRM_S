@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={theme:{extend:{colors:{brand:{DEFAULT:'#0d9488',dark:'#0f766e',light:'#ccfbf1'}}}}}</script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body data-page="dashboard" data-title="Dashboard">
+  <div id="app-sidebar"></div>
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Greeting + range filter -->
+      <section class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h2 id="greeting" class="text-xl font-bold text-slate-800"></h2>
+          <p id="today" class="text-sm text-slate-500 mt-0.5"></p>
+        </div>
+        <div id="rangeFilter" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm self-start shadow-sm">
+          <button data-range="today" class="px-3.5 py-1 rounded-lg transition">Today</button>
+          <button data-range="week" class="px-3.5 py-1 rounded-lg transition">This Week</button>
+          <button data-range="month" class="px-3.5 py-1 rounded-lg transition">This Month</button>
+        </div>
+      </section>
+
+      <!-- KPI cards -->
+      <section id="kpiGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3"></section>
+
+      <!-- Charts -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div class="card flex flex-col">
+          <div class="card-head"><div><h3 class="card-title">Revenue</h3><p class="card-sub">Last 6 months</p></div></div>
+          <div class="p-4 flex-1"><div class="relative h-56"><canvas id="revChart"></canvas></div></div>
+        </div>
+        <div class="card flex flex-col">
+          <div class="card-head"><div><h3 class="card-title">Lead source performance</h3><p class="card-sub">Share of leads by channel</p></div></div>
+          <div class="p-4 flex-1"><div class="relative h-56"><canvas id="leadChart"></canvas></div></div>
+        </div>
+      </section>
+
+      <!-- Appointments + low stock -->
+      <section class="grid grid-cols-1 xl:grid-cols-3 gap-3 items-stretch">
+        <div class="card xl:col-span-2 overflow-hidden flex flex-col">
+          <div class="card-head">
+            <div><h3 class="card-title">Today's appointments</h3><p class="card-sub">Sorted by start time</p></div>
+            <a href="appointments.html" class="card-link">View all</a>
+          </div>
+          <div class="overflow-x-auto flex-1">
+            <table class="data-table">
+              <thead><tr><th>Time</th><th>Customer</th><th>Service</th><th>Therapist</th><th>Status</th></tr></thead>
+              <tbody id="apptRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card flex flex-col">
+          <div class="card-head">
+            <div><h3 class="card-title">Low stock alerts</h3><p class="card-sub">At or below reorder level</p></div>
+            <a href="inventory.html" class="card-link">Inventory</a>
+          </div>
+          <ul id="stockList" class="p-3 space-y-2 flex-1 overflow-y-auto max-h-80"></ul>
+        </div>
+      </section>
+
+      <!-- Birthdays + feedback -->
+      <section class="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
+        <div class="card flex flex-col">
+          <div class="card-head"><div><h3 class="card-title">Upcoming birthdays &amp; anniversaries</h3><p class="card-sub">Next 30 days</p></div></div>
+          <ul id="eventList" class="divide-y divide-slate-100 flex-1"></ul>
+        </div>
+        <div class="card flex flex-col">
+          <div class="card-head">
+            <div><h3 class="card-title">Recent feedback</h3><p class="card-sub">Latest customer reviews</p></div>
+            <a href="feedback.html" class="card-link">View all</a>
+          </div>
+          <ul id="fbList" class="divide-y divide-slate-100 flex-1"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return; // layout.js is redirecting
+    const user=JSON.parse(localStorage.getItem('crmUser'));
+    const $=id=>document.getElementById(id);
+    const now=new Date();
+    const initials=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+    // ---------- Greeting ----------
+    const h=now.getHours();
+    $('greeting').textContent=`Good ${h<12?'morning':h<17?'afternoon':'evening'}, ${user.name}`;
+    $('today').textContent=now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+    // ---------- Toast ----------
+    let tt; const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2200)};
+
+    // ---------- KPI cards ----------
+    const ic=p=>`<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg>`;
+    const avgRating=(feedback.reduce((s,f)=>s+f.rating,0)/feedback.length).toFixed(1);
+    const activeMem=memberships.filter(m=>m.status==='Active').length;
+    function kpiDefs(r){const d=dashRange[r];return [
+      ['Total Customers',customers.length,3.8,'customers.html','M17 20v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M10 10a4 4 0 100-8 4 4 0 000 8'],
+      ["Today's Appointments",d.appts[0],d.appts[1],'appointments.html','M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z'],
+      ['Monthly Revenue',fmtINR(d.revenue[0]),d.revenue[1],'billing.html','M2 6h20v12H2zM2 10h20M6 15h4'],
+      ['Active Memberships',activeMem,2.1,'memberships.html','M20 12v9H4v-9M2 7h20v5H2zM12 22V7'],
+      ['Low Stock Items',kpis.lowStockItems,-8.0,'inventory.html','M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v9'],
+      ['New Customers',d.newCust[0],d.newCust[1],'customers.html','M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M19 8v6M22 11h-6'],
+      ['Repeat Customers',d.repeat[0],d.repeat[1],'customers.html','M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3'],
+      ['Average Rating',avgRating+' / 5',1.2,'feedback.html','M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z']
+    ]}
+    function renderKpis(r){
+      $('kpiGrid').innerHTML=kpiDefs(r).map(k=>{
+        // For "Low Stock Items" a falling number is good, so flip the colour logic
+        const good=k[0]==='Low Stock Items'?k[2]<0:k[2]>=0;
+        return `<a href="${k[3]}" class="card card-hover p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-teal-50 text-teal-700 grid place-items-center shrink-0">${ic(k[4])}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm text-slate-500 truncate">${k[0]}</p>
+            <p class="text-xl font-bold text-slate-800 truncate">${k[1]}</p>
+            <p class="text-xs font-semibold mt-0.5 ${good?'text-emerald-600':'text-rose-600'}">${k[2]>=0?'▲':'▼'} ${Math.abs(k[2])}% <span class="font-normal text-slate-400">vs previous</span></p>
+          </div></a>`}).join('');
+    }
+    // ---------- Range filter ----------
+    function setRange(r){
+      document.querySelectorAll('#rangeFilter button').forEach(b=>{
+        const on=b.dataset.range===r;
+        b.className='px-3.5 py-1 rounded-lg transition '+(on?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100');
+      });
+      renderKpis(r);
+    }
+    $('rangeFilter').onclick=e=>{const b=e.target.closest('button');if(b)setRange(b.dataset.range)};
+    setRange('today');
+
+    // ---------- Charts ----------
+    Chart.defaults.font.family='Inter';Chart.defaults.color='#64748b';
+    const grid={color:'#f1f5f9'};
+    new Chart($('revChart'),{type:'line',data:{labels:revenueTrend.labels,datasets:[{data:revenueTrend.values,borderColor:'#0d9488',backgroundColor:'rgba(13,148,136,.12)',fill:true,tension:.35,pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#0d9488',pointBorderWidth:2}]},
+      options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtINR(c.parsed.y)}}},scales:{y:{grid,border:{display:false},ticks:{callback:v=>'₹'+v/1000+'k'}},x:{grid:{display:false}}}}});
+    new Chart($('leadChart'),{type:'doughnut',data:{labels:leadSourcePerformance.labels,datasets:[{data:leadSourcePerformance.values,backgroundColor:['#0d9488','#e11d48','#2563eb','#16a34a','#f59e0b','#7c3aed','#0891b2','#ea580c','#64748b'],borderWidth:2,borderColor:'#fff'}]},
+      options:{maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right',labels:{boxWidth:10,boxHeight:10,padding:12}}}}});
+
+    // ---------- Today's appointments ----------
+    const iso=now.toISOString().slice(0,10);
+    let todays=appointments.filter(a=>a.date===iso);
+    if(!todays.length)todays=appointments.slice(0,6); // demo fallback: mock dates are fixed
+    const badge={Booked:'new',Confirmed:'active',Completed:'inactive',Cancelled:'lost','No-show':'vip'};
+    $('apptRows').innerHTML=todays.length?todays.sort((a,b)=>a.time.localeCompare(b.time)).slice(0,7).map(a=>
+      `<tr class="cursor-pointer" onclick="location.href='appointments.html'">
+        <td class="font-semibold text-slate-800">${a.time}</td>
+        <td><div class="flex items-center gap-3"><span class="avatar">${initials(a.customer)}</span><span class="font-medium text-slate-800">${a.customer}</span></div></td>
+        <td>${a.service}</td>
+        <td class="text-slate-500">${a.staff}</td>
+        <td><span class="badge badge-${badge[a.status]}">${a.status}</span></td></tr>`).join('')
+      :'<tr><td colspan="5" class="!py-8 text-center text-slate-500">No appointments scheduled for today.</td></tr>';
+
+    // ---------- Low stock ----------
+    const low=products.filter(p=>p.stock<=p.reorderLevel);
+    $('stockList').innerHTML=low.length?low.map(p=>
+      `<li class="rounded-lg border border-slate-100 p-2.5 hover:border-rose-200 hover:bg-rose-50/30 transition">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0"><p class="text-sm font-medium text-slate-800 truncate">${p.name}</p><p class="text-xs text-slate-500 mt-0.5">${p.stock} left · reorder at ${p.reorderLevel}</p></div>
+          <button data-n="${p.name}" class="reorder btn-danger-ghost shrink-0">Reorder</button>
+        </div>
+        <div class="mt-2 h-1.5 rounded-full bg-slate-100"><div class="h-1.5 rounded-full bg-rose-500" style="width:${Math.min(100,Math.max(6,p.stock/p.reorderLevel*100))}%"></div></div></li>`).join('')
+      :'<li class="py-8 text-center text-sm text-slate-500">All items are well stocked.</li>';
+    $('stockList').onclick=e=>{const b=e.target.closest('.reorder');if(b)toast('Reorder request created for '+b.dataset.n)};
+
+    // ---------- Birthdays & anniversaries (next 30 days, year ignored) ----------
+    const today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const events=[];
+    customers.forEach(c=>[['Birthday',c.dob],['Anniversary',c.anniversary]].forEach(([type,d])=>{
+      if(!d||d==='—')return;
+      const [,m,day]=d.split('-').map(Number);
+      let next=new Date(today0.getFullYear(),m-1,day); if(next<today0)next.setFullYear(next.getFullYear()+1);
+      const diff=Math.round((next-today0)/864e5); if(diff<=30)events.push({c,type,next,diff});
+    }));
+    events.sort((a,b)=>a.diff-b.diff);
+    $('eventList').innerHTML=events.length?events.slice(0,5).map(e=>
+      `<li class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 transition">
+        <div class="flex items-center gap-3 min-w-0"><span class="avatar">${initials(e.c.name)}</span>
+          <div class="min-w-0"><p class="text-sm font-medium text-slate-800 truncate">${e.c.name}</p>
+          <p class="text-xs text-slate-500">${e.type} · ${e.next.toLocaleDateString('en-IN',{day:'numeric',month:'short'})} (${e.diff===0?'today':'in '+e.diff+' days'})</p></div></div>
+        <button data-n="${e.c.name}" class="offer btn-primary text-xs !py-1.5 !px-3 shrink-0">Send offer</button></li>`).join('')
+      :'<li class="py-8 text-center text-sm text-slate-500">No birthdays or anniversaries in the next 30 days.</li>';
+    $('eventList').onclick=e=>{const b=e.target.closest('.offer');if(b)toast('Offer sent to '+b.dataset.n)};
+
+    // ---------- Recent feedback ----------
+    const stars=n=>'★'.repeat(n)+'<span class="text-slate-300">'+'★'.repeat(5-n)+'</span>';
+    $('fbList').innerHTML=feedback.slice(0,4).map(f=>
+      `<li class="px-4 py-2.5 hover:bg-slate-50 transition">
+        <div class="flex items-center justify-between gap-3"><div class="flex items-center gap-3 min-w-0"><span class="avatar">${initials(f.customer)}</span>
+          <div class="min-w-0"><p class="text-sm font-medium text-slate-800 truncate">${f.customer}</p><p class="text-xs text-slate-500 truncate">${f.service}</p></div></div>
+          <span class="text-amber-400 text-sm tracking-wide shrink-0">${stars(f.rating)}</span></div>
+        <p class="text-sm text-slate-600 mt-1.5 line-clamp-2">${f.comment}</p></li>`).join('');
+  })();
+  </script>
+</body>
+</html>

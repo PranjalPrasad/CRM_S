@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reports · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+
+  <!-- Print-friendly CSS: used by "Export PDF" (window.print → Save as PDF).
+       Hides the sidebar, top bar and every control marked .no-print, and shows the .print-only header. -->
+  <style>
+    .print-only{display:none}
+    @media print{
+      @page{size:A4 landscape;margin:12mm}
+      body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      #app-sidebar,#app-topbar,.no-print{display:none!important}
+      #page{padding-left:0!important}
+      main{padding:0!important}
+      .print-only{display:block}
+      .card{box-shadow:none!important;break-inside:avoid}
+      #chartCard{break-after:auto}
+      tr{break-inside:avoid}
+      thead{display:table-header-group}
+      .overflow-x-auto{overflow:visible!important}
+      table{min-width:0!important;font-size:11px}
+    }
+  </style>
+</head>
+<body data-page="reports" data-title="Reports">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <div id="page" class="lg:pl-64 min-h-screen flex flex-col">
+    <div id="app-topbar"></div>
+
+    <main class="flex-1 p-4 lg:p-8 space-y-5">
+
+      <!-- Print-only heading (hidden on screen) -->
+      <div class="print-only mb-2">
+        <h1 id="printTitle" class="text-2xl font-bold text-slate-800"></h1>
+        <p id="printMeta" class="text-sm text-slate-500"></p>
+      </div>
+
+      <!-- ===== Filter bar + export buttons ===== -->
+      <form id="filters" novalidate class="card p-4 no-print">
+        <div class="flex flex-wrap items-end gap-3 text-sm">
+          <label class="text-slate-500">Report type
+            <select id="type" class="block mt-1 min-w-[10rem] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none"></select></label>
+          <label class="text-slate-500">Date range
+            <select id="range" class="block mt-1 min-w-[10rem] px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none">
+              <option value="today">Today</option><option value="last7">Last 7 days</option>
+              <option value="month" selected>This Month</option><option value="lastmonth">Last Month</option>
+              <option value="custom">Custom</option></select></label>
+          <!-- Custom range inputs (shown only when "Custom" is selected) -->
+          <div id="customBox" class="hidden flex flex-wrap items-end gap-3">
+            <label class="text-slate-500">From<input id="from" type="date" class="block mt-1 px-3 py-2 rounded-lg border border-slate-300 text-slate-800 focus:border-teal-600 focus:outline-none"></label>
+            <label class="text-slate-500">To<input id="to" type="date" class="block mt-1 px-3 py-2 rounded-lg border border-slate-300 text-slate-800 focus:border-teal-600 focus:outline-none"></label>
+          </div>
+          <button class="btn-primary">Apply</button>
+          <span id="pending" class="hidden text-xs text-amber-600 pb-2">Filters changed — click Apply</span>
+
+          <div class="ml-auto flex flex-wrap gap-2">
+            <button type="button" id="btnCsv" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>Export Excel</button>
+            <button type="button" id="btnPdf" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a1 1 0 01-1-1v-6a1 1 0 011-1h16a1 1 0 011 1v6a1 1 0 01-1 1h-2M6 14h12v7H6z"/></svg>Export PDF</button>
+            <button type="button" id="btnMail" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 7l9 6 9-6"/></svg>Email Report</button>
+          </div>
+        </div>
+        <p id="rangeErr" class="hidden mt-2 text-xs text-rose-600" role="alert"></p>
+      </form>
+
+      <!-- Report caption -->
+      <div>
+        <h2 id="repTitle" class="text-lg font-semibold text-slate-800"></h2>
+        <p id="repMeta" class="text-sm text-slate-500"></p>
+      </div>
+
+      <!-- ===== Summary cards (rebuilt for every report type) ===== -->
+      <section id="cards" class="grid grid-cols-2 xl:grid-cols-4 gap-4"></section>
+
+      <!-- ===== Chart ===== -->
+      <section id="chartCard" class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 id="chartTitle" class="font-semibold text-slate-800 text-sm"></h3>
+          <span id="chartHint" class="text-xs text-slate-400"></span>
+        </div>
+        <div class="relative h-80">
+          <canvas id="chart"></canvas>
+          <div id="chartEmpty" class="hidden absolute inset-0 grid place-items-center text-sm text-slate-400">No data for this period</div>
+        </div>
+      </section>
+
+      <!-- ===== Data table ===== -->
+      <section class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="font-semibold text-slate-800 text-sm">Detailed data</h3>
+          <span id="rowCount" class="text-xs text-slate-400"></span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[720px]">
+            <thead id="thead" class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide"></thead>
+            <tbody id="tbody" class="divide-y divide-slate-100"></tbody>
+            <tfoot id="tfoot" class="bg-slate-50 font-semibold text-slate-700"></tfoot>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== Scheduled reports ===== -->
+      <section class="card p-5 no-print">
+        <div class="flex flex-wrap items-start justify-between gap-2 mb-1">
+          <div>
+            <h3 class="font-semibold text-slate-800">Scheduled Reports</h3>
+            <p class="text-sm text-slate-500">Automatically email a monthly report (previous month's data) as an Excel/CSV file.</p>
+          </div>
+          <button id="schedSave" class="btn-primary text-sm">Save schedule</button>
+        </div>
+        <div id="schedList" class="divide-y divide-slate-100"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== Email report modal ===== -->
+  <div id="mOv" class="no-print fixed inset-0 z-[60] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="mForm" novalidate class="bg-white rounded-2xl mx-auto my-8 p-6 shadow-xl w-full max-w-lg" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="mTitle" class="text-lg font-semibold text-slate-800">Email Report</h3>
+        <button type="button" id="mX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button>
+      </div>
+      <div class="space-y-3 text-sm">
+        <label class="block text-slate-600">To * <span class="text-slate-400">(comma-separated)</span>
+          <input id="m_to" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none text-slate-800" placeholder="owner@serenity.in, accounts@serenity.in">
+          <span id="e_to" class="hidden text-xs text-rose-600"></span></label>
+        <label class="block text-slate-600">Subject
+          <input id="m_sub" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none text-slate-800"></label>
+        <label class="block text-slate-600">Message
+          <textarea id="m_msg" rows="7" class="w-full mt-1 px-3 py-2 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none text-slate-800"></textarea></label>
+        <label class="flex items-center gap-2 text-slate-600"><input id="m_att" type="checkbox" checked class="accent-teal-600"> Attach the table as CSV (Excel)</label>
+        <p class="text-xs text-slate-400">Demo: this front-end template has no mail server, so "Send" only simulates delivery. "Open in mail app" opens your own email client with the text pre-filled.</p>
+      </div>
+      <div class="flex flex-wrap justify-end gap-2 mt-5">
+        <button type="button" id="mCancel" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm">Cancel</button>
+        <button type="button" id="mMailto" class="px-4 py-2 rounded-lg border border-teal-600 text-teal-700 text-sm">Open in mail app</button>
+        <button class="btn-primary text-sm">Send</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="no-print fixed bottom-5 right-5 z-[70] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <!-- Shared scripts: data.js (customers, services, products, memberships, campaigns, staff, leadSourcePerformance, fmtINR, esc …) -->
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+
+  <script>
+  (function(){
+    /* ---------- Guards ---------- */
+    let user={};try{user=JSON.parse(localStorage.getItem('crmUser'))||{}}catch(e){}
+    if(!user.name)return;                                              // layout.js already redirects to login
+    // Reports link is hidden for these roles; also block direct URL access
+    if(['Therapist','Receptionist'].includes(user.role)){location.replace('dashboard.html');return}
+
+    const $=id=>document.getElementById(id);
+
+    /* =========================================================
+       DATE + NUMBER HELPERS
+       ========================================================= */
+    const pad=n=>String(n).padStart(2,'0');
+    const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const parse=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+    const addD=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+    const nDays=(a,b)=>Math.round((parse(b)-parse(a))/864e5)+1;          // inclusive day count
+    const TODAY=iso(new Date());
+    const fLong=s=>parse(s).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+    const fShort=s=>parse(s).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+    const fDay=s=>parse(s).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+    const fHour=h=>`${h%12||12} ${h<12?'AM':'PM'}`;
+    const num=n=>Number(n).toLocaleString('en-IN');
+    const sum=(a,f)=>a.reduce((s,x)=>s+(typeof f==='function'?f(x):x[f]),0);
+    const pct=(a,b)=>b?Math.round(a/b*1000)/10:0;
+    const kfmt=v=>v>=100000?'₹'+(v/100000).toFixed(v%100000?1:0)+'L':v>=1000?'₹'+Math.round(v/1000)+'k':'₹'+v;
+    let tt;const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),3000)};
+
+    /* =========================================================
+       MOCK TIME-SERIES ENGINE
+       data.js has no dated transactions, so every day gets deterministic "random" numbers
+       from a hash of its date. Same date → same numbers, so charts/tables are stable between visits.
+       ========================================================= */
+    const hs=s=>{let h=2166136261;for(const c of String(s)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}h^=h>>>15;h=Math.imul(h,2246822519);h^=h>>>13;return(h>>>0)/4294967296};
+    const WEEK=[1.25,.8,.85,.9,.95,1.1,1.35];                            // Sun…Sat footfall multipliers
+    const FIELDS=['invoices','services','products','gross','discount','net','gst','total','newC','ret'];
+    function dayM(d){
+      const r=k=>hs(d+k),w=WEEK[parse(d).getDay()];
+      const invoices=Math.round((7+r('a')*5)*w);
+      const services=Math.round(invoices*(2200+r('t')*800)/10)*10;
+      const products=Math.round(services*(.07+r('p')*.07)/10)*10;
+      const gross=services+products,discount=Math.round(gross*(.02+r('d')*.04)/10)*10,net=gross-discount,gst=Math.round(net*.18);
+      const newC=Math.round(invoices*(.12+r('n')*.14));
+      return{invoices,services,products,gross,discount,net,gst,total:net+gst,newC,ret:invoices-newC};
+    }
+    // Hourly split used when a single day (Today) is selected
+    const HOURS=[10,11,12,13,14,15,16,17,18,19,20],HW=[4,7,9,8,6,6,8,11,13,12,9],HWS=sum(HW,x=>x);
+    // Buckets: hours for 1 day, days for ≤31 days, weeks beyond that
+    function buckets(start,end){
+      const n=nDays(start,end);
+      if(n===1){const m=dayM(start);
+        return HOURS.map((h,i)=>{const o={label:fHour(h),full:`${fHour(h)} – ${fHour(h+1)}`};FIELDS.forEach(f=>o[f]=Math.round(m[f]*HW[i]/HWS));return o})}
+      const step=n>31?7:1,out=[];
+      for(let i=0;i<n;i+=step){
+        const s=addD(start,i),e=addD(start,Math.min(n,i+step)-1),o={label:step===1?fShort(s):`${fShort(s)} – ${fShort(e)}`,full:step===1?fDay(s):`${fShort(s)} – ${fShort(e)}`};
+        FIELDS.forEach(f=>o[f]=0);
+        for(let j=i;j<Math.min(n,i+step);j++){const m=dayM(addD(start,j));FIELDS.forEach(f=>o[f]+=m[f])}
+        out.push(o);
+      }
+      return out;
+    }
+
+    /* =========================================================
+       DATE RANGE RESOLUTION + VALIDATION
+       ========================================================= */
+    const showErr=m=>{$('rangeErr').textContent=m||'';$('rangeErr').classList.toggle('hidden',!m)};
+    function resolveRange(){
+      showErr('');
+      const t=$('range').value,d=parse(TODAY);
+      if(t==='today')return{start:TODAY,end:TODAY};
+      if(t==='last7')return{start:addD(TODAY,-6),end:TODAY};
+      if(t==='month')return{start:iso(new Date(d.getFullYear(),d.getMonth(),1)),end:TODAY};
+      if(t==='lastmonth')return{start:iso(new Date(d.getFullYear(),d.getMonth()-1,1)),end:iso(new Date(d.getFullYear(),d.getMonth(),0))};
+      const a=$('from').value,b=$('to').value;                           // custom
+      if(!a||!b){showErr('Choose both a start and an end date.');return null}
+      if(a>b){showErr('The start date must be on or before the end date.');return null}
+      if(b>TODAY){showErr('The end date cannot be in the future.');return null}
+      if(nDays(a,b)>366){showErr('Please choose a range of 366 days or less.');return null}
+      return{start:a,end:b};
+    }
+
+    /* =========================================================
+       REPORT BUILDERS — each returns {title,cards,chart,chartTitle,cols,rows,empty}
+       ctx = {start,end,n,bs (buckets),pStart,pEnd (previous period),f (scale vs a normal month),rk (range key)}
+       cols: {k,label,num,fmt(value,row)->html,sum(bool)|tot(rows),sk(sort key)}
+       ========================================================= */
+    const PAL=['#0d9488','#10b981','#0ea5e9','#8b5cf6','#f59e0b','#f43f5e','#64748b','#84cc16','#f97316'];
+    const inr=v=>fmtINR(v);
+    const badge=(cls,t)=>`<span class="badge ${cls}">${esc(t)}</span>`;
+    // Shared Chart.js options
+    const opts=({money,horizontal,stacked,legend=true}={})=>{
+      const val={beginAtZero:true,stacked:!!stacked,grid:{color:'#f1f5f9'},ticks:money?{callback:kfmt}:{}},cat={stacked:!!stacked,grid:{display:false}};
+      return{responsive:true,maintainAspectRatio:false,indexAxis:horizontal?'y':'x',interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:legend,position:'top',align:'end',labels:{boxWidth:10,usePointStyle:true}},
+                 tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${money?inr(c.parsed[horizontal?'x':'y']):num(c.parsed[horizontal?'x':'y'])}`}}},
+        scales:horizontal?{x:val,y:cat}:{y:val,x:cat}};
+    };
+    const doughnut=(labels,data)=>({type:'doughnut',data:{labels,datasets:[{data,backgroundColor:PAL,borderWidth:2,borderColor:'#fff'}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right',labels:{boxWidth:10,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>`${c.label}: ${num(c.parsed)} (${pct(c.parsed,sum(c.dataset.data,x=>x))}%)`}}}}});
+    const totalsFooter=(cols,rows)=>cols.map((c,i)=>i===0?'Total':c.tot?c.tot(rows):c.sum?sum(rows,c.k):'');
+
+    /* ---- 1. Revenue (line) ---- */
+    function revenue(c){
+      const prev=buckets(c.pStart,c.pEnd),T=f=>sum(c.bs,f),P=f=>sum(prev,f),inv=T('invoices'),pinv=P('invoices');
+      const rows=c.bs.map((b,i)=>({_i:i,period:b.full,invoices:b.invoices,services:b.services,products:b.products,discount:b.discount,net:b.net,gst:b.gst,total:b.total}));
+      return{title:'Revenue Report',chartTitle:`Net revenue · ${c.n===1?'hourly':c.n>31?'weekly':'daily'}`,
+        cards:[{label:'Net revenue',value:inr(T('net')),cur:T('net'),prev:P('net'),sub:'after discounts, excl. GST'},
+               {label:'Invoices',value:num(inv),cur:inv,prev:pinv,sub:'bills generated'},
+               {label:'Avg invoice value',value:inr(inv?Math.round(T('net')/inv):0),cur:inv?T('net')/inv:0,prev:pinv?P('net')/pinv:0,sub:'net per invoice'},
+               {label:'Discounts given',value:inr(T('discount')),sub:`${pct(T('discount'),T('gross'))}% of gross sales`}],
+        chart:{type:'line',data:{labels:c.bs.map(b=>b.label),datasets:[
+            {label:'Net revenue',data:c.bs.map(b=>b.net),borderColor:'#0d9488',backgroundColor:'rgba(13,148,136,.12)',fill:true,tension:.3,pointRadius:c.bs.length>20?0:3},
+            {label:'Previous period',data:prev.map(b=>b.net),borderColor:'#94a3b8',borderDash:[5,4],fill:false,tension:.3,pointRadius:0}]},options:opts({money:true})},
+        cols:[{k:'period',label:c.n===1?'Time slot':'Period',sk:'_i',fmt:v=>esc(v)},
+              {k:'invoices',label:'Invoices',num:1,sum:1},{k:'services',label:'Services',num:1,sum:1,fmt:inr},{k:'products',label:'Products',num:1,sum:1,fmt:inr},
+              {k:'discount',label:'Discount',num:1,sum:1,fmt:inr},{k:'net',label:'Net sales',num:1,sum:1,fmt:inr},{k:'gst',label:'GST (18%)',num:1,sum:1,fmt:inr},{k:'total',label:'Total collected',num:1,sum:1,fmt:inr}],
+        rows};
+    }
+
+    /* ---- 2. Customers (stacked bar) ---- */
+    function customersR(c){
+      const prev=buckets(c.pStart,c.pEnd),T=f=>sum(c.bs,f),P=f=>sum(prev,f);
+      // Customers who "visited" in the period: expected visits scale with the number of days
+      const rows=customers.map(cu=>{
+        const v=Math.floor((cu.visits||1)/8*(c.n/30)+hs(cu.id+'v'+c.rk));
+        const ticket=cu.visits?Math.round(cu.spend/cu.visits/10)*10:2400;
+        return{name:cu.name,mobile:cu.mobile,status:cu.status,source:cu.source,visits:v,spend:v*ticket,last:v?addD(c.end,-Math.floor(hs(cu.id+'l'+c.rk)*c.n)):''};
+      }).filter(r=>r.visits>0);
+      return{title:'Customer Report',chartTitle:`New vs returning customers · ${c.n===1?'hourly':c.n>31?'weekly':'daily'}`,
+        cards:[{label:'New customers',value:num(T('newC')),cur:T('newC'),prev:P('newC'),sub:'first-time visitors'},
+               {label:'Returning visits',value:num(T('ret')),cur:T('ret'),prev:P('ret'),sub:'repeat customers'},
+               {label:'Total customers',value:num(customers.length),sub:'in your database'},
+               {label:'VIP customers',value:num(customers.filter(x=>x.status==='VIP').length),sub:`${pct(customers.filter(x=>x.status==='VIP').length,customers.length)}% of all customers`}],
+        chart:{type:'bar',data:{labels:c.bs.map(b=>b.label),datasets:[{label:'New',data:c.bs.map(b=>b.newC),backgroundColor:'#0d9488',borderRadius:4},{label:'Returning',data:c.bs.map(b=>b.ret),backgroundColor:'#99f6e4',borderRadius:4}]},options:opts({stacked:true})},
+        cols:[{k:'name',label:'Customer'},{k:'mobile',label:'Mobile'},{k:'status',label:'Status',fmt:v=>badge('badge-'+v.toLowerCase(),v)},{k:'source',label:'Lead source'},
+              {k:'visits',label:'Visits (period)',num:1,sum:1},{k:'spend',label:'Spend (period)',num:1,sum:1,fmt:inr},{k:'last',label:'Last visit in period',fmt:v=>v?fDate(v):'—'}],
+        rows,note:'Table lists customers who visited during the selected period.'};
+    }
+    const fDate=s=>fLong(s);
+
+    /* ---- 3. Services (horizontal bar) ---- */
+    const SVC_BASE=[96,64,41,88,102,77,59,38,27,9];                      // monthly bookings per service (matches dashboard topServices)
+    function servicesR(c){
+      let rows=services.map((s,i)=>{const b=c.sc(SVC_BASE[i%10],'s'+i);return{service:s.name,category:s.category||'—',duration:s.duration,price:s.price,bookings:b,revenue:b*s.price}});
+      const tot=sum(rows,'revenue');rows.forEach(r=>r.share=pct(r.revenue,tot));
+      const sorted=[...rows].sort((a,b)=>b.revenue-a.revenue),top=sorted[0];
+      return{title:'Service Report',chartTitle:'Revenue by service',
+        cards:[{label:'Total bookings',value:num(sum(rows,'bookings')),sub:'services performed'},
+               {label:'Service revenue',value:inr(tot),sub:'before GST'},
+               {label:'Top service',value:top&&top.revenue?esc(top.service):'—',sub:top&&top.revenue?`${inr(top.revenue)} · ${top.share}% share`:'no bookings',small:true},
+               {label:'Avg service value',value:inr(sum(rows,'bookings')?Math.round(tot/sum(rows,'bookings')):0),sub:'revenue per booking'}],
+        chart:{type:'bar',data:{labels:sorted.map(r=>r.service),datasets:[{label:'Revenue',data:sorted.map(r=>r.revenue),backgroundColor:'#0d9488',borderRadius:4}]},options:opts({money:true,horizontal:true,legend:false})},
+        cols:[{k:'service',label:'Service'},{k:'category',label:'Category'},{k:'duration',label:'Duration',num:1,fmt:v=>v+' min'},{k:'price',label:'Price',num:1,fmt:inr},
+              {k:'bookings',label:'Bookings',num:1,sum:1},{k:'revenue',label:'Revenue',num:1,sum:1,fmt:inr},{k:'share',label:'Share',num:1,fmt:v=>v+'%',tot:r=>sum(r,'revenue')?'100%':'0%'}],
+        rows,empty:!tot};
+    }
+
+    /* ---- 4. Staff (bar) — same mock numbers as staff.html ---- */
+    const STAFF_BASE=[[12,10,24000,5],[9,8,16000,5],[0,0,0,0],[92,71,172000,15],[84,66,158000,15],[67,52,126000,12],[78,60,112000,18],[61,49,79000,15]];   // services, customers, revenue, commission %
+    const STAFF_PPL=staff.map(s=>({name:s.name,role:s.role==='Admin'?'Manager':s.role,rating:+s.rating})).concat([{name:'Meenal Kulkarni',role:'Stylist',rating:4.6},{name:'Imran Qureshi',role:'Stylist',rating:4.3}]);
+    function staffR(c){
+      const rows=STAFF_PPL.map((p,i)=>{const b=STAFF_BASE[i],g=c.f*(.88+.24*hs(p.name+c.rk)),rev=Math.round(b[2]*g/100)*100;
+        return{name:p.name,role:p.role,services:Math.round(b[0]*g),customers:Math.round(b[1]*g),revenue:rev,rating:p.rating,comm:b[3],commission:Math.round(rev*b[3]/100)}});
+      const top=[...rows].sort((a,b)=>b.revenue-a.revenue)[0];
+      return{title:'Staff Report',chartTitle:'Revenue by staff member',
+        cards:[{label:'Staff revenue',value:inr(sum(rows,'revenue')),sub:`across ${rows.length} team members`},
+               {label:'Services performed',value:num(sum(rows,'services')),sub:`${num(sum(rows,'customers'))} customers served`},
+               {label:'Top performer',value:top.revenue?esc(top.name):'—',sub:top.revenue?`${inr(top.revenue)} · ${top.role}`:'no revenue',small:true},
+               {label:'Commission payable',value:inr(sum(rows,'commission')),sub:'based on each staff commission %'}],
+        chart:{type:'bar',data:{labels:rows.map(r=>r.name.split(' ')[0]),datasets:[{label:'Revenue',data:rows.map(r=>r.revenue),backgroundColor:rows.map(r=>r.revenue?'#0d9488':'#cbd5e1'),borderRadius:6,maxBarThickness:48}]},options:opts({money:true,legend:false})},
+        cols:[{k:'name',label:'Staff'},{k:'role',label:'Role'},{k:'services',label:'Services',num:1,sum:1},{k:'customers',label:'Customers',num:1,sum:1},{k:'revenue',label:'Revenue',num:1,sum:1,fmt:inr},
+              {k:'rating',label:'Avg rating',num:1,fmt:v=>v.toFixed(1)+' ★',tot:r=>(sum(r,'rating')/r.length).toFixed(1)+' ★'},{k:'comm',label:'Commission %',num:1,fmt:v=>v+'%'},{k:'commission',label:'Commission earned',num:1,sum:1,fmt:inr}],
+        rows,empty:!sum(rows,'revenue')};
+    }
+
+    /* ---- 5. Leads (doughnut) ---- */
+    function leadsR(c){
+      const rows=leadSourcePerformance.labels.map((l,i)=>{
+        const leads=c.sc(leadSourcePerformance.values[i],'l'+i),conv=Math.round(leads*(.16+(i*7%5)*.03)),interested=Math.max(conv,Math.round(leads*.6));
+        return{source:l,leads,interested,converted:conv,rate:pct(conv,leads),revenue:conv*2400}});
+      const L=sum(rows,'leads'),C=sum(rows,'converted'),best=[...rows].sort((a,b)=>b.converted-a.converted)[0];
+      return{title:'Leads Report',chartTitle:'Leads by source',
+        cards:[{label:'Total leads',value:num(L),sub:'enquiries captured'},{label:'Converted',value:num(C),sub:'became customers'},
+               {label:'Conversion rate',value:pct(C,L)+'%',sub:best&&best.converted?`best source: ${esc(best.source)}`:'—'},
+               {label:'Pending follow-ups',value:num(kpis.pendingFollowups),sub:'open right now (not date-filtered)'}],
+        chart:doughnut(rows.map(r=>r.source),rows.map(r=>r.leads)),
+        cols:[{k:'source',label:'Lead source'},{k:'leads',label:'Leads',num:1,sum:1},{k:'interested',label:'Interested',num:1,sum:1},{k:'converted',label:'Converted',num:1,sum:1},
+              {k:'rate',label:'Conversion',num:1,fmt:v=>v+'%',tot:r=>pct(sum(r,'converted'),sum(r,'leads'))+'%'},{k:'revenue',label:'Revenue from converted',num:1,sum:1,fmt:inr}],
+        rows,empty:!L};
+    }
+
+    /* ---- 6. Inventory (bar + reorder line) ---- */
+    const USED_BASE=[14,22,18,9,30,16,12,10,20,11,26,13];                // monthly units used per product
+    function inventoryR(c){
+      const rows=products.map((p,i)=>{
+        const exp=p.expiry,st=exp<TODAY?'Expired':p.stock<=p.reorderLevel?'Low stock':exp<=addD(TODAY,60)?'Expiring soon':'OK';
+        return{product:p.name,supplier:p.supplier,stock:p.stock,reorder:p.reorderLevel,used:c.sc(USED_BASE[i%12],'u'+i),value:p.stock*(p.price||0),expiry:exp,status:st}});
+      const SB={Expired:'badge-lost','Low stock':'badge-vip','Expiring soon':'badge-new',OK:'badge-active'};
+      return{title:'Inventory Report',chartTitle:'Stock on hand vs reorder level',
+        cards:[{label:'Products',value:num(rows.length),sub:'tracked items'},{label:'Stock value',value:inr(sum(rows,'value')),sub:'at retail price'},
+               {label:'Low stock items',value:num(rows.filter(r=>r.status==='Low stock').length),sub:'at or below reorder level'},
+               {label:'Expired / expiring',value:num(rows.filter(r=>r.status==='Expired'||r.status==='Expiring soon').length),sub:`${rows.filter(r=>r.status==='Expired').length} expired · within 60 days`}],
+        chart:{type:'bar',data:{labels:rows.map(r=>r.product),datasets:[
+            {type:'bar',label:'Stock on hand',data:rows.map(r=>r.stock),backgroundColor:rows.map(r=>r.stock<=r.reorder?'#f43f5e':'#0d9488'),borderRadius:4},
+            {type:'line',label:'Reorder level',data:rows.map(r=>r.reorder),borderColor:'#f59e0b',borderDash:[5,4],pointRadius:3,fill:false}]},options:opts()},
+        cols:[{k:'product',label:'Product'},{k:'supplier',label:'Supplier'},{k:'stock',label:'In stock',num:1,sum:1},{k:'reorder',label:'Reorder level',num:1},{k:'used',label:'Used (period)',num:1,sum:1},
+              {k:'value',label:'Stock value',num:1,sum:1,fmt:inr},{k:'expiry',label:'Expiry',fmt:v=>fDate(v)},{k:'status',label:'Status',fmt:v=>badge(SB[v],v)}],
+        rows};
+    }
+
+    /* ---- 7. Memberships (doughnut) ---- */
+    function membershipsR(c){
+      const rows=memberships.filter(m=>m.start<=c.end&&m.expiry>=c.start).map(m=>{
+        const left=nDays(TODAY,m.expiry)-1,st=m.used>=m.total?'Completed':m.expiry<TODAY?'Expired':left<=14?'Expiring soon':'Active';
+        return{customer:m.customer,plan:m.plan,start:m.start,expiry:m.expiry,used:m.used,total:m.total,price:m.price,status:st}});
+      const SB={Active:'badge-active','Expiring soon':'badge-vip',Expired:'badge-lost',Completed:'badge-inactive'};
+      const byPlan={};rows.forEach(r=>byPlan[r.plan]=(byPlan[r.plan]||0)+1);
+      return{title:'Membership Report',chartTitle:'Memberships by plan',
+        cards:[{label:'Memberships in period',value:num(rows.length),sub:'active at any time in the range'},
+               {label:'Active now',value:num(rows.filter(r=>r.status==='Active'||r.status==='Expiring soon').length),sub:'with sessions remaining'},
+               {label:'Expiring in 14 days',value:num(rows.filter(r=>r.status==='Expiring soon').length),sub:'renewal opportunities'},
+               {label:'Membership value',value:inr(sum(rows,'price')),sub:'total plan value'}],
+        chart:doughnut(Object.keys(byPlan),Object.values(byPlan)),
+        cols:[{k:'customer',label:'Customer'},{k:'plan',label:'Plan'},{k:'start',label:'Start',fmt:v=>fDate(v)},{k:'expiry',label:'Expiry',fmt:v=>fDate(v)},
+              {k:'used',label:'Sessions used',num:1,sum:1},{k:'total',label:'Total sessions',num:1,sum:1},{k:'price',label:'Plan value',num:1,sum:1,fmt:inr},{k:'status',label:'Status',fmt:v=>badge(SB[v],v)}],
+        rows,empty:!rows.length};
+    }
+
+    /* ---- 8. Campaigns (grouped bar) ---- */
+    function campaignsR(c){
+      const rows=campaigns.map((cp,i)=>{const sent=cp.status==='Draft'?0:c.sc(cp.sent,'c'+i),conv=Math.round(sent*cp.conversions/cp.sent);
+        return{campaign:cp.name,channel:cp.channel,status:cp.status,sent,conversions:conv,rate:pct(conv,sent),revenue:conv*2600}});
+      const SB={Running:'badge-active',Completed:'badge-inactive',Draft:'badge-new'};
+      const S=sum(rows,'sent'),C=sum(rows,'conversions');
+      return{title:'Campaign Report',chartTitle:'Messages sent vs conversions',
+        cards:[{label:'Campaigns',value:num(rows.length),sub:`${rows.filter(r=>r.status==='Running').length} running now`},{label:'Messages sent',value:num(S),sub:'WhatsApp, SMS, email, social'},
+               {label:'Conversions',value:num(C),sub:`${pct(C,S)}% conversion rate`},{label:'Revenue generated',value:inr(sum(rows,'revenue')),sub:'estimated from conversions'}],
+        chart:{type:'bar',data:{labels:rows.map(r=>r.campaign),datasets:[{label:'Sent',data:rows.map(r=>r.sent),backgroundColor:'#99f6e4',borderRadius:4},{label:'Conversions',data:rows.map(r=>r.conversions),backgroundColor:'#0d9488',borderRadius:4}]},options:opts()},
+        cols:[{k:'campaign',label:'Campaign'},{k:'channel',label:'Channel'},{k:'status',label:'Status',fmt:v=>badge(SB[v]||'badge-inactive',v)},{k:'sent',label:'Sent',num:1,sum:1},{k:'conversions',label:'Conversions',num:1,sum:1},
+              {k:'rate',label:'Conv. rate',num:1,fmt:v=>v+'%',tot:r=>pct(sum(r,'conversions'),sum(r,'sent'))+'%'},{k:'revenue',label:'Revenue',num:1,sum:1,fmt:inr}],
+        rows,empty:!S};
+    }
+
+    const REPORTS={revenue:['Revenue',revenue],customers:['Customers',customersR],services:['Services',servicesR],staff:['Staff',staffR],
+                   leads:['Leads',leadsR],inventory:['Inventory',inventoryR],memberships:['Memberships',membershipsR],campaigns:['Campaigns',campaignsR]};
+    $('type').innerHTML=Object.entries(REPORTS).map(([k,v])=>`<option value="${k}">${v[0]}</option>`).join('');
+
+    /* =========================================================
+       RENDERING (cards, chart, table)
+       ========================================================= */
+    let S=null,chart=null,sort={key:null,dir:'asc'};                     // S = current built report + meta
+
+    const delta=(cur,prev)=>{if(prev==null||!prev)return '';const p=(cur-prev)/prev*100,up=p>=0;
+      return `<span class="${up?'text-emerald-600':'text-rose-600'} font-medium">${up?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span> <span class="text-slate-400">vs previous period</span>`};
+
+    function renderCards(){
+      $('cards').innerHTML=S.out.cards.map(k=>`<div class="card p-4">
+        <p class="text-xs text-slate-500">${k.label}</p>
+        <p class="mt-1 ${k.small?'text-lg leading-8':'text-2xl'} font-bold text-slate-800 truncate">${k.value}</p>
+        <p class="mt-1 text-xs text-slate-500">${(k.prev!=null&&delta(k.cur,k.prev))||k.sub}</p></div>`).join('');
+    }
+
+    function renderChart(){
+      if(chart){chart.destroy();chart=null}
+      $('chartTitle').textContent=S.out.chartTitle;
+      $('chartEmpty').classList.toggle('hidden',!S.out.empty);
+      $('chart').classList.toggle('invisible',!!S.out.empty);
+      if(S.out.empty)return;
+      chart=new Chart($('chart'),S.out.chart);
+    }
+
+    const cellText=(c,r)=>c.fmt?c.fmt(r[c.k],r):c.num?num(r[c.k]):esc(r[c.k]);
+    const sortedRows=()=>{
+      const rows=[...S.out.rows];if(!sort.key)return rows;
+      const col=S.out.cols.find(c=>c.k===sort.key),key=col.sk||col.k;
+      return rows.sort((a,b)=>{const x=a[key],y=b[key],r=typeof x==='string'?x.localeCompare(y):x-y;return sort.dir==='asc'?r:-r});
+    };
+    function renderTable(){
+      const cols=S.out.cols,rows=sortedRows();
+      $('thead').innerHTML='<tr>'+cols.map(c=>{const on=sort.key===c.k;
+        return `<th scope="col" aria-sort="${on?(sort.dir==='asc'?'ascending':'descending'):'none'}" class="px-4 py-3 font-semibold ${c.num?'text-right':'text-left'}">
+          <button type="button" data-sort="${c.k}" class="uppercase tracking-wide hover:text-teal-700 ${on?'text-teal-700':''}">${c.label} <span class="text-[10px] ${on?'':'opacity-40'}">${on?(sort.dir==='asc'?'▲':'▼'):'↕'}</span></button></th>`}).join('')+'</tr>';
+      $('tbody').innerHTML=rows.length?rows.map(r=>'<tr class="hover:bg-slate-50">'+cols.map(c=>`<td class="px-4 py-2.5 text-slate-700 ${c.num?'text-right tabular-nums':''}">${cellText(c,r)}</td>`).join('')+'</tr>').join('')
+        :`<tr><td colspan="${cols.length}" class="px-4 py-10 text-center text-slate-400">No records for this period.</td></tr>`;
+      const hasTot=cols.some(c=>c.sum||c.tot);
+      $('tfoot').innerHTML=hasTot&&rows.length?'<tr>'+cols.map((c,i)=>{
+        const v=i===0?'Total':c.tot?c.tot(rows):c.sum?sum(rows,c.k):'';
+        const shown=i===0||v===''?v:(c.sum&&c.fmt?c.fmt(v,{}):typeof v==='number'?num(v):v);
+        return `<td class="px-4 py-3 ${c.num?'text-right tabular-nums':''}">${shown}</td>`}).join('')+'</tr>':'';
+      $('rowCount').textContent=`${rows.length} row${rows.length===1?'':'s'}`+(S.out.note?` · ${S.out.note}`:'');
+    }
+    $('thead').addEventListener('click',e=>{                              // click a header to sort, click again to reverse
+      const b=e.target.closest('[data-sort]');if(!b)return;
+      sort=sort.key===b.dataset.sort?{key:sort.key,dir:sort.dir==='asc'?'desc':'asc'}:{key:b.dataset.sort,dir:'asc'};
+      renderTable();
+    });
+
+    /* =========================================================
+       APPLY — read filters → build report → render everything
+       ========================================================= */
+    function apply(){
+      const r=resolveRange();if(!r)return;
+      const type=$('type').value,n=nDays(r.start,r.end),pEnd=addD(r.start,-1),pStart=addD(pEnd,-(n-1)),rk=r.start+'_'+r.end;
+      // f = this range's revenue ÷ revenue of a normal 30-day month; entity reports (services, staff…) scale their monthly base by it
+      const ref=sum(Array.from({length:30},(_,i)=>dayM(addD(TODAY,-29+i))),'net'),rangeNet=sum(Array.from({length:n},(_,i)=>dayM(addD(r.start,i))),'net');
+      const f=rangeNet/ref;
+      const ctx={...r,n,pStart,pEnd,rk,f,bs:buckets(r.start,r.end),sc:(base,key)=>Math.max(0,Math.round(base*f*(.88+.24*hs(key+'|'+rk))))};
+      const out=REPORTS[type][1](ctx);
+      const period=r.start===r.end?fLong(r.start):`${fLong(r.start)} – ${fLong(r.end)}`;
+      S={type,out,period,range:r};sort={key:null,dir:'asc'};
+      $('repTitle').textContent=out.title;
+      $('repMeta').textContent=`${period} · ${n} day${n>1?'s':''}`+(['revenue','customers'].includes(type)?` · compared with the previous ${n} day${n>1?'s':''}`:'');
+      $('printTitle').textContent=`Serenity Spa & Salon — ${out.title}`;
+      $('printMeta').textContent=`${period} · generated ${new Date().toLocaleString('en-IN')} by ${user.name}`;
+      $('pending').classList.add('hidden');
+      renderCards();renderChart();renderTable();
+    }
+    $('filters').addEventListener('submit',e=>{e.preventDefault();apply()});
+    // Show/hide custom inputs, flag un-applied changes
+    $('range').addEventListener('change',()=>$('customBox').classList.toggle('hidden',$('range').value!=='custom'));
+    ['type','range','from','to'].forEach(id=>$(id).addEventListener('change',()=>$('pending').classList.remove('hidden')));
+    $('to').max=$('from').max=TODAY;
+    $('from').value=addD(TODAY,-29);$('to').value=TODAY;                 // sensible custom defaults
+
+    /* =========================================================
+       EXPORTS: CSV (Excel), PDF (print), Email
+       ========================================================= */
+    // CSV cell: quote when needed + neutralise spreadsheet formulas in text cells (CSV-injection safe)
+    const csvCell=v=>{if(v==null)return '';let s=String(v);if(typeof v==='string'&&/^[=+\-@\t\r]/.test(s))s="'"+s;return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+    function buildCsv(){
+      const cols=S.out.cols,rows=sortedRows(),L=[];
+      L.push(['Serenity Spa & Salon — '+S.out.title],['Period',S.period],['Generated',new Date().toLocaleString('en-IN')],[]);
+      L.push(cols.map(c=>c.label));
+      rows.forEach(r=>L.push(cols.map(c=>r[c.k])));                       // raw values (numbers stay numbers, dates stay ISO)
+      if(cols.some(c=>c.sum||c.tot)&&rows.length)L.push(cols.map((c,i)=>i===0?'Total':c.tot?c.tot(rows):c.sum?sum(rows,c.k):''));
+      return '\ufeff'+L.map(r=>r.map(csvCell).join(',')).join('\r\n');   // BOM → Excel reads ₹ and accents correctly
+    }
+    $('btnCsv').onclick=()=>{
+      if(!S)return;
+      const blob=new Blob([buildCsv()],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=`serenity-${S.type}-report_${S.range.start}_to_${S.range.end}.csv`;
+      document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      toast('CSV downloaded — open it in Excel');
+    };
+    // PDF: browser print dialog → "Save as PDF". Chart is resized around printing so it fits the page.
+    $('btnPdf').onclick=()=>{if(S)window.print()};
+    window.addEventListener('beforeprint',()=>chart&&chart.resize());
+    window.addEventListener('afterprint',()=>chart&&chart.resize());
+
+    // Email modal
+    const emails=s=>s.split(/[,;\s]+/).filter(Boolean);
+    const okMail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+    const summaryText=()=>S.out.cards.map(k=>`- ${k.label}: ${String(k.value).replace(/<[^>]+>/g,'')}`).join('\n');
+    function openMail(){
+      if(!S)return;
+      $('m_sub').value=`Serenity — ${S.out.title} (${S.period})`;
+      $('m_msg').value=`Hi,\n\nPlease find the ${S.out.title.toLowerCase()} for ${S.period}.\n\nHighlights:\n${summaryText()}\n\nRegards,\n${user.name}`;
+      $('e_to').classList.add('hidden');$('mOv').classList.remove('hidden');$('m_to').focus();
+    }
+    const closeMail=()=>$('mOv').classList.add('hidden');
+    const checkTo=()=>{const l=emails($('m_to').value),bad=!l.length?'Enter at least one email address':l.find(e=>!okMail(e))?`"${l.find(e=>!okMail(e))}" is not a valid email`:'';
+      $('e_to').textContent=bad;$('e_to').classList.toggle('hidden',!bad);return bad?null:l};
+    $('btnMail').onclick=openMail;$('mX').onclick=$('mCancel').onclick=closeMail;
+    $('mOv').addEventListener('mousedown',e=>{if(e.target===$('mOv'))closeMail()});
+    $('mForm').addEventListener('submit',e=>{e.preventDefault();const l=checkTo();if(!l)return;closeMail();toast(`Report sent to ${l.join(', ')} (demo)`)});
+    $('mMailto').onclick=()=>{const l=checkTo();if(!l)return;location.href=`mailto:${l.join(',')}?subject=${encodeURIComponent($('m_sub').value)}&body=${encodeURIComponent($('m_msg').value)}`};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMail()});
+
+    /* =========================================================
+       SCHEDULED REPORTS (saved in localStorage)
+       ========================================================= */
+    const SCHED=[['customer','Monthly customer report','New, returning and VIP customers'],['service','Monthly service report','Bookings and revenue by service'],['revenue','Monthly revenue report','Net sales, GST and discounts']];
+    const KEY='crmScheduledReports';
+    let sched={customer:{on:true,email:'owner@serenity.in',day:'1'},service:{on:false,email:'owner@serenity.in',day:'1'},revenue:{on:true,email:'owner@serenity.in',day:'1'}};
+    try{Object.assign(sched,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+    const ord=n=>n+(['th','st','nd','rd'][(n%100>10&&n%100<14)?0:Math.min(n%10,4)%4]||'th');
+    const dayOpts=sel=>[...Array.from({length:28},(_,i)=>[String(i+1),`${ord(i+1)} of every month`]),['last','Last day of the month']].map(([v,t])=>`<option value="${v}" ${v===sel?'selected':''}>${t}</option>`).join('');
+    const nextSend=day=>{const t=parse(TODAY),pick=(y,m)=>day==='last'?new Date(y,m+1,0):new Date(y,m,+day);
+      let d=pick(t.getFullYear(),t.getMonth());if(d<t)d=pick(t.getMonth()===11?t.getFullYear()+1:t.getFullYear(),(t.getMonth()+1)%12);return iso(d)};
+    function renderSched(){
+      $('schedList').innerHTML=SCHED.map(([id,name,desc])=>{const s=sched[id];return `
+        <div class="py-4 grid lg:grid-cols-[1fr,1fr,13rem,9rem] gap-3 items-center" data-id="${id}">
+          <div class="flex items-center gap-3">
+            <button type="button" role="switch" aria-checked="${s.on}" aria-label="Enable ${name}" data-act="toggle"
+                    class="relative w-11 h-6 rounded-full shrink-0 transition ${s.on?'bg-teal-600':'bg-slate-300'}">
+              <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${s.on?'translate-x-5':''}"></span></button>
+            <div><p class="text-sm font-medium text-slate-800">${name}</p><p class="text-xs text-slate-500">${desc}</p></div>
+          </div>
+          <label class="text-xs text-slate-500">Recipient email(s)
+            <input data-act="email" value="${esc(s.email)}" ${s.on?'':'disabled'} placeholder="name@serenity.in" class="block mt-1 w-full px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-800 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">
+            <span class="hidden text-rose-600" data-err></span></label>
+          <label class="text-xs text-slate-500">Send day
+            <select data-act="day" ${s.on?'':'disabled'} class="block mt-1 w-full px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white text-slate-800 focus:border-teal-600 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400">${dayOpts(s.day)}</select></label>
+          <p class="text-xs ${s.on?'text-slate-600':'text-slate-400'}">${s.on?`Next send<br><span class="font-medium text-teal-700">${fLong(nextSend(s.day))}</span>`:'Off'}</p>
+        </div>`}).join('');
+    }
+    $('schedList').addEventListener('click',e=>{const b=e.target.closest('[data-act="toggle"]');if(!b)return;
+      const id=b.closest('[data-id]').dataset.id;sched[id].on=!sched[id].on;renderSched()});
+    $('schedList').addEventListener('change',e=>{const row=e.target.closest('[data-id]');if(!row)return;
+      if(e.target.dataset.act==='day'){sched[row.dataset.id].day=e.target.value;renderSched()}});
+    $('schedList').addEventListener('input',e=>{const row=e.target.closest('[data-id]');if(row&&e.target.dataset.act==='email')sched[row.dataset.id].email=e.target.value});
+    $('schedSave').onclick=()=>{
+      let ok=true;
+      document.querySelectorAll('#schedList [data-id]').forEach(row=>{
+        const s=sched[row.dataset.id],er=row.querySelector('[data-err]'),l=emails(s.email),bad=s.on&&(!l.length||l.some(x=>!okMail(x)));
+        er.textContent=bad?'Enter valid email address(es)':'';er.classList.toggle('hidden',!bad);if(bad)ok=false});
+      if(!ok)return;
+      try{localStorage.setItem(KEY,JSON.stringify(sched))}catch(e){}
+      const n=Object.values(sched).filter(s=>s.on).length;toast(n?`Schedule saved — ${n} monthly report${n>1?'s':''} active`:'Schedule saved — all reports are off');
+    };
+
+    /* ---------- Init ---------- */
+    renderSched();apply();
+  })();
+  </script>
+</body>
+</html>

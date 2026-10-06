@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memberships · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="memberships" data-title="Memberships">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Summary cards -->
+      <section id="summary" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></section>
+
+      <!-- Filters + primary action -->
+      <div class="card p-3 flex flex-wrap items-center gap-2.5">
+        <input id="q" type="search" placeholder="Search by customer…" class="flex-1 min-w-[12rem] px-3 py-1.5 text-sm rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none">
+        <select id="fStatus" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white">
+          <option value="">All statuses</option><option>Active</option><option>Expiring Soon</option><option>Expired</option><option>Completed</option>
+        </select>
+        <select id="fPkg" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white"></select>
+        <button id="sellBtn" class="btn-primary text-sm !py-2">+ Sell membership</button>
+      </div>
+
+      <!-- Memberships table -->
+      <div class="card overflow-hidden"><div class="overflow-x-auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Customer</th><th>Package</th><th>Start</th><th>Expiry</th>
+            <th class="ta-c">Total</th><th class="ta-c">Used</th><th class="min-w-[9rem]">Remaining</th>
+            <th>Status</th><th class="ta-r">Actions</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div></div>
+      <p class="text-xs text-slate-400 flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded bg-amber-100"></span>Expires within 7 days <span class="inline-block w-3 h-3 rounded bg-rose-100 ml-3"></span>Expired</p>
+    </main>
+  </div>
+
+  <!-- Reusable overlay (details / use session / renew / sell) -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="text-sm p-5"></div>
+      <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <datalist id="custList"></datalist>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <!-- Compatibility shim: fills in anything this page needs that your data.js doesn't define,
+       so the page works with the data.js from this project OR a simpler/older one. -->
+  <script>
+  (function(){
+    const has=n=>{try{return (0,eval)('typeof '+n)!=='undefined'}catch(e){return false}};
+    const def=(n,v)=>{if(!has(n))window[n]=v};
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    def('addDaysISO',(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))});
+    def('esc',s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+    def('initialsOf',n=>String(n).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+    def('avatarColor',n=>['bg-teal-600','bg-emerald-600','bg-sky-600','bg-violet-600','bg-amber-600','bg-rose-600'][[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0)%6]);
+    def('fmtDate',d=>d&&d!=='—'?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—');
+    def('fmtINR',n=>'₹'+Number(n).toLocaleString('en-IN'));
+    def('kpis',{});def('packageSales',[]);def('customers',[]);def('packages',[]);def('memberships',[]);
+    if(!has('therapists')){const t=has('staff')?staff.filter(x=>(x.role||x[1])==='Therapist').map(x=>x.name||x[0]):[];
+      window.therapists=t.length?t:['Deepak Yadav','Lakshmi Narayan','Farah Shaikh']}
+    // Make sure every package has the fields this page reads
+    packages.forEach((p,i)=>{
+      p.name=p.name||p[0]||'Package '+(i+1);
+      if(!Array.isArray(p.items))p.items=(Array.isArray(p.includes)?p.includes:['Swedish Massage']).map(t=>{const m=String(t).match(/^(.*) x(\d+)$/);return{service:m?m[1]:t,qty:m?+m[2]:1}});
+      if(!Array.isArray(p.includes))p.includes=p.items.map(x=>x.service);
+      p.sessions=p.sessions||p.items.reduce((a,x)=>a+x.qty,0)||1; p.validityDays=p.validityDays||60; p.status=p.status||'Active'; p.price=p.price||0;
+    });
+    if(!packages.length)packages.push({id:1,name:'Relax & Rejuvenate',includes:['Swedish Massage'],items:[{service:'Swedish Massage',qty:1}],sessions:2,validityDays:60,status:'Active',price:4200});
+    // Rebuild sample memberships (relative to today) if they lack session data
+    if(!memberships.length||memberships.some(m=>typeof m.total!=='number'||!Array.isArray(m.history))){
+      const T=addDaysISO(new Date().toISOString().slice(0,10),0),nm=customers.length?customers.map(c=>c.name):['Priya Sharma','Rahul Verma','Ananya Iyer'];
+      const spec=[[0,-30,8,3],[1,-84,6,4],[2,-68,4,2],[0,-20,6,1],[1,-56,8,5],[2,-55,3,3],[0,-45,6,5],[1,-90,4,1],[2,-10,6,0],[0,-20,6,2]];
+      memberships.length=0;
+      spec.forEach(([pi,off,total,used],i)=>{
+        const p=packages[pi%packages.length],start=addDaysISO(T,off),step=Math.max(1,Math.floor(-off/(used+1))),svc=p.items.map(x=>x.service);
+        memberships.push({id:i+1,customer:nm[(i*2+1)%nm.length],plan:p.name,package:p.name,start,expiry:addDaysISO(start,p.validityDays),total,used,price:p.price,balance:p.price,
+          history:Array.from({length:used},(_,k)=>({date:addDaysISO(start,Math.min(-off,(k+1)*step)),service:svc[k%svc.length],therapist:therapists[(i+k)%therapists.length]}))});
+      });
+    }
+  })();
+  </script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;           // layout.js redirects to login
+    const $=id=>document.getElementById(id);
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0);
+    let tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
+    const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
+    const pkgOf=n=>packages.find(p=>p.name===n);
+
+    // ---------- Derived values (status is always computed, so every update reflects instantly) ----------
+    const daysLeft=m=>Math.round((new Date(m.expiry)-new Date(TODAY))/864e5);
+    const statusOf=m=>m.used>=m.total?'Completed':daysLeft(m)<0?'Expired':daysLeft(m)<=7?'Expiring Soon':'Active';
+    const BADGE={Active:'badge-active','Expiring Soon':'badge-vip',Expired:'badge-lost',Completed:'badge-inactive'};
+    const bar=m=>{const rem=m.total-m.used,pct=m.total?Math.round(rem/m.total*100):0,c=rem===0?'bg-slate-300':pct>50?'bg-teal-500':pct>25?'bg-amber-500':'bg-rose-500';
+      return `<div class="flex items-center gap-2"><div class="flex-1 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div class="h-full ${c} transition-all" style="width:${pct}%"></div></div><span class="text-xs font-semibold text-slate-600 w-6 text-right">${rem}</span></div>`};
+
+    // ---------- Overlay + form helpers ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white';
+    const F=(id,l,ctl)=>`<div><label class="font-medium text-slate-700" for="${id}">${l}</label>${ctl}<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`;
+    const I=(id,t='text',x='')=>`<input id="${id}" type="${t}" ${x} class="${inp}">`;
+    const S=(id,o)=>`<select id="${id}" class="${inp}">${o.map(v=>`<option>${esc(v)}</option>`).join('')}</select>`;
+    const val=id=>$(id).value.trim();
+    const bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    let ovSubmit=null;
+    function modal({title,html,submit='Save',viewOnly=false,wide=false,onSubmit}){
+      $('ovTitle').textContent=title;$('ovBody').innerHTML=html;$('ovForm').style.maxWidth=wide?'40rem':'28rem';ovSubmit=onSubmit;
+      $('ovSubmit').textContent=submit;$('ovSubmit').classList.toggle('hidden',viewOnly);$('ovCancel').textContent=viewOnly?'Close':'Cancel';
+      $('ov').classList.remove('hidden');
+    }
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+    $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+    $('fPkg').innerHTML='<option value="">All package types</option>'+packages.map(p=>`<option>${esc(p.name)}</option>`).join('');
+
+    // ---------- Render summary + table ----------
+    const ico=(p,label,hover,id,act,off)=>`<button data-id="${id}" data-act="${act}" title="${label}" aria-label="${label}" ${off?'disabled':''} class="p-1.5 rounded-lg text-slate-500 transition ${off?'opacity-30 cursor-not-allowed':hover}"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg></button>`;
+    function render(){
+      const all=memberships.map(m=>({m,s:statusOf(m)}));
+      const live=all.filter(x=>x.s==='Active'||x.s==='Expiring Soon');
+      const card=(l,v,sub,c='text-slate-800')=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold ${c} mt-0.5">${v}</p><p class="text-xs text-slate-400 mt-0.5">${sub}</p></div>`;
+      $('summary').innerHTML=card('Active memberships',live.length,'incl. expiring soon')+card('Expiring in 7 days',all.filter(x=>x.s==='Expiring Soon').length,'send a reminder','text-amber-600')+
+        card('Expired',all.filter(x=>x.s==='Expired').length,'renew to win back','text-rose-600')+card('Total sessions remaining',live.reduce((a,x)=>a+x.m.total-x.m.used,0),'across active plans','text-teal-700');
+      kpis.activeMemberships=live.length;                         // keep the shared KPI in sync
+
+      const q=$('q').value.toLowerCase(),fs=$('fStatus').value,fp=$('fPkg').value;
+      const rows=all.filter(x=>(!fs||x.s===fs)&&(!fp||x.m.package===fp)&&x.m.customer.toLowerCase().includes(q));
+      $('rows').innerHTML=rows.map(({m,s})=>{
+        const d=daysLeft(m),tone=s==='Expiring Soon'?'bg-amber-50':s==='Expired'?'bg-rose-50 text-slate-500':'';
+        const hint=s==='Expired'?`${-d}d ago`:s==='Completed'?'':d===0?'today':`in ${d}d`;
+        return `<tr class="${tone}"><td><div class="flex items-center gap-2.5"><span class="w-8 h-8 rounded-full ${avatarColor(m.customer)} text-white text-[11px] font-semibold grid place-items-center shrink-0">${initialsOf(m.customer)}</span><span class="font-medium ${s==='Expired'?'':'text-slate-800'}">${esc(m.customer)}</span></div></td>
+          <td>${esc(m.package)}</td><td>${fmtDate(m.start)}</td>
+          <td>${fmtDate(m.expiry)}<p class="text-xs ${s==='Expiring Soon'?'text-amber-700 font-medium':'text-slate-400'}">${hint}</p></td>
+          <td class="ta-c">${m.total}</td><td class="ta-c">${m.used}</td><td>${bar(m)}</td>
+          <td><span class="badge ${BADGE[s]}">${s}</span></td>
+          <td class="ta-r">${ico('M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 100-6 3 3 0 000 6z','View details','hover:bg-slate-100',m.id,'view')}${ico('M22 11.1V12a10 10 0 11-5.9-9.1M22 4L12 14l-3-3','Use session','hover:bg-teal-50 hover:text-teal-700',m.id,'use',s==='Expired'||s==='Completed')}${ico('M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15','Renew','hover:bg-emerald-50 hover:text-emerald-700',m.id,'renew')}${ico('M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0','Send expiry reminder','hover:bg-amber-50 hover:text-amber-700',m.id,'remind',s==='Completed')}</td></tr>`}).join('')
+        ||'<tr><td colspan="9" class="!py-8 text-center text-slate-400">No memberships match your filters.</td></tr>';
+    }
+    ['input','change'].forEach(ev=>{$('q').addEventListener(ev,render);$('fStatus').addEventListener(ev,render);$('fPkg').addEventListener(ev,render)});
+
+    // ---------- Row actions ----------
+    $('rows').addEventListener('click',e=>{
+      const b=e.target.closest('button[data-act]');if(!b||b.disabled)return;
+      const m=memberships.find(x=>x.id==b.dataset.id),a=b.dataset.act;
+      if(a==='view')viewModal(m);else if(a==='use')useModal(m);else if(a==='renew')renewModal(m);
+      else if(a==='remind'){m.lastReminder=TODAY;const c=customers.find(x=>x.name===m.customer);
+        toast(`Expiry reminder sent to ${m.customer}${c?' ('+c.mobile+')':''} via WhatsApp`)}
+    });
+
+    // Details: package info + usage history
+    function viewModal(m){
+      const p=pkgOf(m.package)||{includes:[],price:m.price},s=statusOf(m),dl=(l,v)=>`<div><p class="text-xs text-slate-400">${l}</p><p class="font-medium text-slate-800 mt-0.5">${v}</p></div>`;
+      const hist=[...m.history].sort((a,b)=>b.date.localeCompare(a.date));
+      modal({title:'Membership details',viewOnly:true,wide:true,html:`
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-lg bg-slate-50 border border-slate-100 p-3">${dl('Customer',esc(m.customer))}${dl('Package',esc(m.package))}${dl('Status',`<span class="badge ${BADGE[s]}">${s}</span>`)}
+          ${dl('Start',fmtDate(m.start))}${dl('Expiry',fmtDate(m.expiry))}${dl('Price',fmtINR(m.price||p.price))}
+          ${dl('Includes',esc(p.includes.join(', ')||'—'))}${dl('Sessions',`${m.used} used of ${m.total}`)}${dl('Last reminder',fmtDate(m.lastReminder||'—'))}</div>
+        <div class="mt-3">${bar(m)}</div>
+        <h4 class="font-semibold text-slate-800 mt-4 mb-2">Session usage history</h4>
+        <div class="overflow-x-auto border border-slate-200 rounded-lg"><table class="data-table"><thead><tr><th>Date</th><th>Service</th><th>Therapist</th></tr></thead>
+        <tbody>${hist.map(h=>`<tr><td>${fmtDate(h.date)}</td><td>${esc(h.service)}</td><td>${esc(h.therapist)}</td></tr>`).join('')||'<tr><td colspan="3" class="!py-6 text-center text-slate-400">No sessions used yet.</td></tr>'}</tbody></table></div>`});
+    }
+
+    // Use session: logs service + therapist, increments used, bar updates on re-render
+    function useModal(m){
+      const p=pkgOf(m.package),svc=p?[...new Set(p.items.map(i=>i.service))]:services.map(s=>s.name);
+      modal({title:`Use session · ${m.customer}`,submit:'Confirm session',html:`<p class="text-slate-500 mb-3">${m.total-m.used} of ${m.total} sessions remaining on ${esc(m.package)}.</p>
+        <div class="space-y-3">${F('u_svc','Service',S('u_svc',svc))}${F('u_th','Therapist',S('u_th',therapists))}${F('u_date','Date',I('u_date','date'))}</div>`,
+        onSubmit(){
+          if(!bad('u_date',val('u_date')?'':'Choose a date.'))return false;
+          if(m.used>=m.total)return toast('No sessions left.');
+          m.history.push({date:val('u_date'),service:val('u_svc'),therapist:val('u_th')});m.used=m.history.length;
+          render();toast(`Session used · ${m.total-m.used} remaining for ${m.customer}`);
+        }});
+      $('u_date').value=TODAY;
+    }
+
+    // Shared form body for Renew + Sell (package, sessions, start, payment mode, live preview)
+    const planFields=(extra='')=>`<div class="space-y-3">${extra}${F('n_pkg','Package',S('n_pkg',packages.filter(p=>p.status==='Active').map(p=>p.name)))}
+      <div class="grid grid-cols-2 gap-3">${F('n_start','Start date',I('n_start','date'))}${F('n_ses','Sessions',I('n_ses','number','min="1"'))}</div>${F('n_mode','Payment mode',S('n_mode',['UPI','Card','Cash']))}
+      <div class="flex items-center justify-between bg-teal-50 rounded-lg px-4 py-2.5"><div><p class="text-teal-800">Amount payable</p><p id="n_exp" class="text-xs text-teal-700"></p></div><span id="n_pay" class="text-lg font-bold text-teal-800"></span></div></div>`;
+    function wirePreview(){
+      let last=null;
+      const upd=e=>{const p=pkgOf(val('n_pkg'));if(!p)return;
+        if(!e||e.target.id==='n_pkg'||last!==p.name){$('n_ses').value=p.sessions;last=p.name}
+        $('n_pay').textContent=fmtINR(p.price);$('n_exp').textContent=val('n_start')?'Valid until '+fmtDate(addDaysISO(val('n_start'),p.validityDays)):''};
+      $('ovBody').oninput=$('ovBody').onchange=upd;upd();
+    }
+    function save(m,customer){   // validates + writes membership and a package-sale record
+      const p=pkgOf(val('n_pkg')),n=+val('n_ses'),st=val('n_start');
+      let ok=bad('n_start',st?'':'Choose a start date.');ok=bad('n_ses',n>=1?'':'Enter at least 1 session.')&&ok;if(!ok)return false;
+      const exp=addDaysISO(st,p.validityDays);
+      if(m){Object.assign(m,{plan:p.name,package:p.name,start:st,expiry:exp,total:m.total+n,price:p.price})}      // renew: remaining sessions carry over
+      else memberships.push({id:nextId(memberships),customer,plan:p.name,package:p.name,start:st,expiry:exp,total:n,used:0,price:p.price,balance:p.price,history:[]});
+      packageSales.push({id:nextId(packageSales),customer:customer||m.customer,package:p.name,start:st,expiry:exp,price:p.price,mode:val('n_mode'),date:TODAY});
+      render();return true;
+    }
+
+    // Renew
+    function renewModal(m){
+      modal({title:`Renew · ${m.customer}`,submit:'Confirm renewal',html:planFields(`<p class="text-slate-500">Current: ${esc(m.package)}, expires ${fmtDate(m.expiry)}. Unused sessions carry over.</p>`),
+        onSubmit(){if(save(m)!==false)toast(`Renewed ${m.customer} until ${fmtDate(m.expiry)}`);else return false}});
+      $('n_pkg').value=m.package;$('n_start').value=m.expiry>TODAY?m.expiry:TODAY;wirePreview();
+    }
+    // Sell new membership
+    $('sellBtn').onclick=()=>{
+      modal({title:'Sell new membership',submit:'Confirm sale',html:planFields(F('n_cust','Customer',I('n_cust','text','list="custList" placeholder="Start typing a name…"'))),
+        onSubmit(){
+          const c=val('n_cust');if(!bad('n_cust',customers.some(x=>x.name===c)?'':'Pick a customer from the list.'))return false;
+          if(save(null,c)===false)return false;toast(`Membership sold to ${c}`);
+        }});
+      $('n_start').value=TODAY;wirePreview();
+    };
+    render();
+  })(); 
+  </script>
+</body>
+</html>

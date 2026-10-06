@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marketing & Campaigns · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+</head>
+<body data-page="campaigns" data-title="Marketing & Campaigns">
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+
+      <!-- Tabs + primary action -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="tabs" class="inline-flex flex-wrap p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
+          <button data-t="camp" class="px-4 py-1 rounded-lg">Campaigns</button><button data-t="auto" class="px-4 py-1 rounded-lg">Automations</button><button data-t="tpl" class="px-4 py-1 rounded-lg">Templates</button>
+        </div>
+        <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+      </div>
+
+      <!-- CAMPAIGNS TAB -->
+      <section id="t_camp" class="space-y-4">
+        <div id="summary" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></div>
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Campaigns</h3><p class="card-sub">Newest first</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Campaign</th><th>Channel</th><th>Audience</th><th>Sent date</th><th class="ta-r">Sent</th><th class="ta-r">Responses</th><th class="ta-r">Redemptions</th><th>Status</th></tr></thead>
+          <tbody id="campRows"></tbody></table></div>
+          <div id="pg_camp" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+        <div class="card overflow-hidden">
+          <div class="card-head"><div><h3 class="card-title">Coupon codes</h3><p class="card-sub">Codes created for campaigns</p></div></div>
+          <div class="overflow-x-auto"><table class="data-table">
+          <thead><tr><th>Code</th><th>Discount</th><th class="ta-r">Used</th><th>Expiry</th><th>Status</th></tr></thead>
+          <tbody id="couponRows"></tbody></table></div>
+          <div id="pg_coupon" class="px-4 py-3 border-t border-slate-100 bg-slate-50/60"></div></div>
+      </section>
+
+      <!-- AUTOMATIONS TAB -->
+      <section id="t_auto" class="space-y-3 hidden"><p id="autoCount" class="text-sm text-slate-500"></p><div id="autoGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div></section>
+
+      <!-- TEMPLATES TAB -->
+      <section id="t_tpl" class="hidden"><div id="tplGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div></section>
+    </main>
+  </div>
+
+  <!-- Reusable overlay (wizard / edit modals) -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4">
+    <form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full max-w-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="text-sm p-5"></div>
+      <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button type="button" id="ovBack" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50 hidden">Back</button><button id="ovSubmit" class="btn-primary text-sm"></button></div>
+    </form>
+  </div>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <!-- Compatibility + seed data: adds helpers, campaign stats, templates, automations and coupons -->
+  <script>
+  (function(){
+    const has=n=>{try{return (0,eval)('typeof '+n)!=='undefined'}catch(e){return false}};
+    const def=(n,v)=>{if(!has(n))window[n]=v};
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    def('addDaysISO',(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))});
+    def('esc',s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+    def('fmtDate',d=>d&&d!=='—'?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—');
+    def('customers',[]);def('memberships',[]);def('campaigns',[]);
+    const T=addDaysISO(new Date().toISOString().slice(0,10),0);
+    const aud=['All customers','VIP customers','Birthday this month','All customers','Inactive 60 days','Inactive 90 days'],off=[-1,-4,-12,-25,-40,0];
+    campaigns.forEach((c,i)=>{
+      if(c.audience)return;
+      const draft=c.status==='Draft';
+      c.channel=['WhatsApp','SMS','Email'].includes(c.channel)?c.channel:'WhatsApp';c.audience=aud[i%6];c.sentDate=draft?'—':addDaysISO(T,off[i%6]);
+      c.sent=draft?0:c.sent;c.delivered=Math.round(c.sent*.96);c.responses=draft?0:Math.round(c.sent*(.12+i*.02));c.redemptions=draft?0:(c.conversions||0);
+    });
+    window.coupons=[['DIWALI20','20%',38,20],['GLOW15','15%',24,45],['BDAY25','25%',17,90],['WELCOME10','10%',61,120],['WINBACK30','₹500',9,-6]].map((r,i)=>({id:i+1,code:r[0],discount:r[1],used:r[2],expiry:addDaysISO(T,r[3])}));
+    window.templates=[
+      ['Birthday Offer','WhatsApp','Hi {name} 🎂 Happy Birthday from {salon}! Enjoy {offer}. Use code {code} before {validity}.'],
+      ['Anniversary Offer','WhatsApp','Happy Anniversary {name}! 💕 Celebrate with a couples spa session: {offer}. Code {code}, valid till {validity}.'],
+      ['Membership Expiry','SMS','Hi {name}, your {salon} membership expires soon. Renew now and get {offer}. Code {code}.'],
+      ['Appointment Reminder','WhatsApp','Hi {name}, your appointment at {salon} is confirmed. We will remind you 2 hours before. Reply 1 to reschedule.'],
+      ['Feedback Request','WhatsApp','Hi {name}, thank you for visiting {salon}! How was your experience today? Reply with a rating from 1 to 5.'],
+      ['Win-back Offer','SMS','We miss you {name}! Come back to {salon} and enjoy {offer}. Code {code}, valid till {validity}.'],
+      ['VIP Loyalty Offer','Email','Dear {name}, as one of our VIP guests you get {offer}. Use code {code} before {validity}. Thank you for your loyalty!'],
+      ['Review Request','SMS','Hi {name}, loved having you at {salon}! Please share a quick Google review: g.page/serenity-spa']
+    ].map((t,i)=>({id:i+1,name:t[0],channel:t[1],body:t[2]}));
+    window.automations=[
+      ['Birthday offer','1 day before customer birthday','WhatsApp',1,148,22],['Anniversary offer','On anniversary date','WhatsApp',2,1,6],['Membership expiry reminder','7 days before membership expiry','SMS',3,0,14],
+      ['Appointment confirmation & reminder','On booking and 2 hours before','WhatsApp',4,0,212],['Post-service feedback request','2 hours after service is completed','WhatsApp',5,0,96],['30/60/90-day inactive campaign','No visit for 30, 60 or 90 days','WhatsApp',6,-2,31],
+      ['VIP loyalty offer','1st of every month for VIP customers','Email',7,-5,8],['Review request after service','1 day after service','SMS',8,0,54],['Monthly report','1st of every month, 9:00 AM (to owner)','Email',null,-5,1]
+    ].map((a,i)=>({id:i+1,name:a[0],trigger:a[1],channel:a[2],templateId:a[3],lastRun:addDaysISO(T,a[4]),count:a[5],on:![3,7].includes(i)}));
+  })();
+  </script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;           // layout.js redirects to login
+    const $=id=>document.getElementById(id);
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0);
+    let tab='camp',tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2800)};
+    const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
+    const CH={WhatsApp:'bg-green-100 text-green-700',SMS:'bg-sky-100 text-sky-700',Email:'bg-violet-100 text-violet-700'};
+    const ST={Running:'badge-new',Completed:'badge-active',Draft:'badge-inactive',Scheduled:'badge-vip'};
+    const chTag=c=>`<span class="badge ${CH[c]||''}">${c}</span>`;
+    const tplOf=id=>templates.find(t=>t.id==id);
+
+    // ---------- Template variables + WhatsApp-style bubble ----------
+    const fill=(body,v={})=>{const d={name:'Priya',offer:'20% off on Hair Spa',code:'GLOW20',validity:fmtDate(addDaysISO(TODAY,30)),salon:'Serenity Spa',...v};return body.replace(/\{(\w+)\}/g,(m,k)=>k in d?d[k]:m)};
+    const bubble=(txt,ch='WhatsApp')=>`<div class="rounded-xl p-3" style="background:#e5ddd5"><div class="ml-auto max-w-[92%] rounded-lg rounded-tr-none px-3 py-2 text-[13px] text-slate-800 shadow-sm" style="background:#d9fdd3"><p class="whitespace-pre-line break-words">${esc(txt)||'<span class="text-slate-400">Your message preview…</span>'}</p><p class="text-[10px] text-slate-500 text-right mt-1">${ch==='WhatsApp'?'10:30 ✓✓':ch}</p></div></div>`;
+
+    // ---------- Audiences (computed from customers + memberships) ----------
+    const since=c=>Math.round((new Date(TODAY)-new Date(c.lastVisit))/864e5);
+    const memDays=m=>Math.round((new Date(m.expiry)-new Date(TODAY))/864e5);
+    const AUD=[
+      ['all','All customers',()=>customers],['vip','VIP customers',()=>customers.filter(c=>c.status==='VIP')],
+      ['in30','Inactive 30+ days',()=>customers.filter(c=>since(c)>=30)],['in60','Inactive 60+ days',()=>customers.filter(c=>since(c)>=60)],['in90','Inactive 90+ days',()=>customers.filter(c=>since(c)>=90)],
+      ['bday','Birthday this month',()=>customers.filter(c=>+String(c.dob).slice(5,7)===new Date(TODAY).getMonth()+1)],
+      ['memexp','Membership expiring (30 days)',()=>{const n=new Set(memberships.filter(m=>m.used<m.total&&memDays(m)>=0&&memDays(m)<=30).map(m=>m.customer));return customers.filter(c=>n.has(c.name))}]
+    ];
+    const audOf=k=>AUD.find(a=>a[0]===k);
+
+    // ---------- Overlay + form helpers ----------
+    const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white text-sm';
+    const G='grid sm:grid-cols-2 gap-3';
+    const F=(id,l,c)=>`<div><label class="font-medium text-slate-700 text-sm" for="${id}">${l}</label>${c}<p id="e_${id}" class="text-xs text-rose-600 mt-1 hidden"></p></div>`;
+    const I=(id,t='text',x='')=>`<input id="${id}" type="${t}" ${x} class="${inp}">`;
+    const SEL=(id,o,sel)=>`<select id="${id}" class="${inp}">${o.map(v=>Array.isArray(v)?`<option value="${v[0]}" ${v[0]==sel?'selected':''}>${esc(v[1])}</option>`:`<option ${v===sel?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
+    const val=id=>$(id).value.trim(),bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    let ovSubmit=null,ovBack=null;
+    const focus1=()=>{const f=$('ovBody').querySelector('input:not([type=radio]),select,textarea');if(f)f.focus()};
+    function modal(title,submit,html,fn){$('ovTitle').textContent=title;$('ovSubmit').textContent=submit;$('ovBody').innerHTML=html;ovSubmit=fn;ovBack=null;$('ovBack').classList.add('hidden');$('ov').classList.remove('hidden');focus1()}
+    const closeOv=()=>$('ov').classList.add('hidden');
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ovBack').onclick=()=>ovBack&&ovBack();
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
+    const VARS=['{name}','{offer}','{code}','{validity}','{salon}'];
+    const chips=ta=>`<div class="flex flex-wrap gap-1.5 mt-1.5">${VARS.map(v=>`<button type="button" data-ins="${v}" data-ta="${ta}" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-teal-100 text-xs text-slate-600 transition">${v}</button>`).join('')}</div>`;
+    $('ovBody').addEventListener('click',e=>{const b=e.target.closest('[data-ins]');if(!b)return;const t=$(b.dataset.ta),s=t.selectionStart??t.value.length;t.value=t.value.slice(0,s)+b.dataset.ins+t.value.slice(t.selectionEnd??s);t.focus();t.dispatchEvent(new Event('input',{bubbles:true}))});
+
+    // ---------- Pagination (Campaigns + Coupons; always visible, per-table page size) ----------
+    const pg={camp:1,coupon:1},size={camp:5,coupon:5};
+    function paged(key,arr){
+      const n=arr.length,sz=size[key],pages=Math.max(1,Math.ceil(n/sz));
+      pg[key]=Math.min(Math.max(1,pg[key]),pages);
+      const c=pg[key],s=(c-1)*sz,e=Math.min(s+sz,n);
+      const b=(l,p,on,dis,t)=>`<button type="button" data-pg="${key}:${p}" ${dis?'disabled':''} title="${t||'Page '+p}" class="min-w-[2rem] h-8 px-2.5 rounded-lg border text-xs transition ${on?'bg-teal-600 text-white border-teal-600 font-semibold':'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'} ${dis?'opacity-40 cursor-not-allowed hover:bg-white':''}">${l}</button>`;
+      const st=Math.max(1,Math.min(c-2,pages-4)),en=Math.min(pages,st+4);
+      let nums='';for(let i=st;i<=en;i++)nums+=b(i,i,i===c);
+      $('pg_'+key).innerHTML=`<div class="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div class="flex flex-wrap items-center gap-4"><span>${n?`Showing <b class="text-slate-700">${s+1}–${e}</b> of <b class="text-slate-700">${n}</b>`:'No records'}</span>
+          <label class="flex items-center gap-1.5">Rows per page <select data-ps="${key}" class="px-2 py-1 rounded-lg border border-slate-300 bg-white text-xs">${[5,10,20,50].map(v=>`<option ${v===sz?'selected':''}>${v}</option>`).join('')}</select></label></div>
+        <div class="flex items-center gap-1">${b('«',1,false,c===1,'First page')}${b('‹',c-1,false,c===1,'Previous page')}${nums}${b('›',c+1,false,c===pages,'Next page')}${b('»',pages,false,c===pages,'Last page')}</div></div>`;
+      return arr.slice(s,e);
+    }
+    document.addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(!b||b.disabled)return;const[k,p]=b.dataset.pg.split(':');pg[k]=+p;render()});
+    document.addEventListener('change',e=>{const t=e.target.closest&&e.target.closest('[data-ps]');if(!t)return;size[t.dataset.ps]=+t.value;pg[t.dataset.ps]=1;render()});
+
+    // ---------- Render ----------
+    function render(){
+      const on='bg-teal-600 text-white font-semibold shadow-sm',off='text-slate-600 hover:bg-slate-100';
+      document.querySelectorAll('#tabs button').forEach(b=>b.className='px-4 py-1 rounded-lg transition '+(b.dataset.t===tab?on:off));
+      ['camp','auto','tpl'].forEach(t=>$('t_'+t).classList.toggle('hidden',t!==tab));
+      $('addBtn').textContent={camp:'+ Create Campaign',tpl:'+ New Template'}[tab]||'';$('addBtn').classList.toggle('hidden',tab==='auto');
+
+      const sentC=campaigns.filter(c=>c.status==='Running'||c.status==='Completed'),del=campaigns.reduce((a,c)=>a+(c.delivered||0),0),resp=campaigns.reduce((a,c)=>a+(c.responses||0),0),red=campaigns.reduce((a,c)=>a+(c.redemptions||0),0);
+      const card=(l,v,s,c='text-slate-800')=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold ${c} mt-0.5">${v}</p><p class="text-xs text-slate-400 mt-0.5">${s}</p></div>`;
+      $('summary').innerHTML=card('Campaigns Sent',sentC.length,campaigns.filter(c=>c.status==='Scheduled').length+' scheduled')+card('Messages Delivered',del.toLocaleString('en-IN'),'across all channels')+card('Response Rate',(del?(resp/del*100).toFixed(1):0)+'%',resp.toLocaleString('en-IN')+' responses','text-teal-700')+card('Redemptions',red.toLocaleString('en-IN'),'coupons used','text-emerald-600');
+      $('campRows').innerHTML=paged('camp',campaigns).map(c=>`<tr><td class="font-medium text-slate-800">${esc(c.name)}</td><td>${chTag(c.channel)}</td><td>${esc(c.audience)}</td><td class="whitespace-nowrap">${fmtDate(c.sentDate)}</td>
+        <td class="ta-r">${c.status==='Scheduled'?`<span class="text-slate-400">${c.queued} queued</span>`:c.sent}</td><td class="ta-r">${c.responses}</td><td class="ta-r">${c.redemptions}</td><td><span class="badge ${ST[c.status]||''}">${c.status}</span></td></tr>`).join('')||'<tr><td colspan="8" class="!py-8 text-center text-slate-400">No campaigns yet.</td></tr>';
+      $('couponRows').innerHTML=paged('coupon',coupons).map(c=>{const ex=c.expiry<TODAY;return `<tr><td class="font-mono font-semibold text-slate-800">${esc(c.code)}</td><td>${esc(c.discount)}</td><td class="ta-r">${c.used}</td><td>${fmtDate(c.expiry)}</td><td><span class="badge ${ex?'badge-lost':'badge-active'}">${ex?'Expired':'Active'}</span></td></tr>`}).join('')||'<tr><td colspan="5" class="!py-8 text-center text-slate-400">No coupons yet.</td></tr>';
+
+      $('autoCount').textContent=`${automations.filter(a=>a.on).length} of ${automations.length} automations are active`;
+      $('autoGrid').innerHTML=automations.map(a=>{const t=tplOf(a.templateId);return `<div class="card card-hover p-4 flex flex-col gap-2 ${a.on?'':'opacity-70'}">
+        <div class="flex items-start justify-between gap-3"><h4 class="font-semibold text-slate-800">${esc(a.name)}</h4>
+          <button data-tg="${a.id}" type="button" role="switch" aria-checked="${a.on}" aria-label="Toggle ${esc(a.name)}" class="relative shrink-0 w-11 h-6 rounded-full transition-colors ${a.on?'bg-teal-600':'bg-slate-300'}"><span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${a.on?'translate-x-5':''}"></span></button></div>
+        <p class="text-xs text-slate-500">⚡ ${esc(a.trigger)}</p><div class="flex items-center gap-2 text-xs">${chTag(a.channel)}<span class="text-slate-500">${t?esc(t.name):'Built-in report'}</span></div>
+        <p class="text-xs text-slate-400">${a.on?`Last run ${fmtDate(a.lastRun)} · ${a.count} sent`:'Paused · last run '+fmtDate(a.lastRun)}</p>
+        <button data-ae="${a.id}" type="button" class="mt-auto self-start text-xs px-3 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 transition">Edit</button></div>`}).join('');
+      $('tplGrid').innerHTML=templates.map(t=>`<div class="card card-hover p-4 space-y-3"><div class="flex items-center justify-between"><h4 class="font-semibold text-slate-800">${esc(t.name)}</h4>${chTag(t.channel)}</div>${bubble(fill(t.body),t.channel)}<button data-te="${t.id}" type="button" class="text-xs px-3 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 transition">Edit</button></div>`).join('');
+    }
+    $('tabs').onclick=e=>{const b=e.target.closest('[data-t]');if(b){tab=b.dataset.t;render()}};
+    $('addBtn').onclick=()=>tab==='camp'?wizard():tplModal();
+
+    // ---------- Automation toggle + edit ----------
+    $('autoGrid').addEventListener('click',e=>{
+      const tg=e.target.closest('[data-tg]'),ed=e.target.closest('[data-ae]');
+      if(tg){const a=automations.find(x=>x.id==tg.dataset.tg);a.on=!a.on;render();toast(`${a.name} turned ${a.on?'ON':'OFF'}`)}
+      if(ed){const a=automations.find(x=>x.id==ed.dataset.ae),opts=[['','Built-in report'],...templates.map(t=>[t.id,t.name])];
+        modal(`Edit · ${a.name}`,'Save Changes',`<div class="${G}"><div class="sm:col-span-2">${F('a_trig','Trigger',I('a_trig'))}</div>${F('a_ch','Channel',SEL('a_ch',['WhatsApp','SMS','Email'],a.channel))}${F('a_tpl','Template',SEL('a_tpl',opts,a.templateId||''))}</div><div id="a_prev" class="mt-4"></div>`,()=>{
+          if(!bad('a_trig',val('a_trig')?'':'Enter the trigger.'))return false;
+          Object.assign(a,{trigger:val('a_trig'),channel:val('a_ch'),templateId:val('a_tpl')?+val('a_tpl'):null});render();toast('Automation updated')});
+        $('a_trig').value=a.trigger;const pv=()=>{const t=tplOf($('a_tpl').value);$('a_prev').innerHTML=t?bubble(fill(t.body),$('a_ch').value):''};$('a_tpl').onchange=$('a_ch').onchange=pv;pv()}
+    });
+
+    // ---------- Template create/edit with live preview ----------
+    $('tplGrid').addEventListener('click',e=>{const b=e.target.closest('[data-te]');if(b)tplModal(templates.find(t=>t.id==b.dataset.te))});
+    function tplModal(t){
+      modal(t?'Edit template':'New template',t?'Save Template':'Create Template',`<div class="${G}">${F('t_name','Template name',I('t_name'))}${F('t_ch','Channel',SEL('t_ch',['WhatsApp','SMS','Email'],t&&t.channel))}</div>
+        <div class="mt-3">${F('t_body','Message',`<textarea id="t_body" rows="4" class="${inp}"></textarea>`)}${chips('t_body')}</div><p class="font-medium text-slate-700 text-sm mt-4 mb-1">Live preview</p><div id="t_prev"></div>`,()=>{
+        let ok=bad('t_name',val('t_name')?'':'Enter a name.');ok=bad('t_body',val('t_body')?'':'Write the message.')&&ok;if(!ok)return false;
+        if(t)Object.assign(t,{name:val('t_name'),channel:val('t_ch'),body:val('t_body')});else templates.push({id:nextId(templates),name:val('t_name'),channel:val('t_ch'),body:val('t_body')});
+        render();toast(t?'Template updated':'Template created')});
+      $('t_name').value=t?t.name:'';$('t_body').value=t?t.body:'Hi {name}, ';
+      const pv=()=>$('t_prev').innerHTML=bubble(fill($('t_body').value),$('t_ch').value);$('t_body').oninput=$('t_ch').onchange=pv;pv();
+    }
+
+    // ---------- Create Campaign: 4-step wizard ----------
+    function wizard(){
+      const w={step:1,d:{name:'',goal:'Increase bookings',aud:'',ch:'WhatsApp',tpl:'',msg:'',offer:'',code:'',disc:'',valid:addDaysISO(TODAY,30),when:'now',date:addDaysISO(TODAY,1),time:'10:00'}};
+      const TITLES=['Basics','Audience','Message','Schedule & preview'];
+      const pills=()=>`<div class="flex gap-2 mb-5">${TITLES.map((t,i)=>`<div class="flex-1"><div class="h-1.5 rounded-full ${i<w.step?'bg-teal-600':'bg-slate-200'}"></div><p class="text-xs mt-1 ${i+1===w.step?'text-teal-700 font-semibold':'text-slate-400'}">${i+1}. ${t}</p></div>`).join('')}</div>`;
+      const show=()=>{const d=w.d;let h='';
+        if(w.step===1)h=`<div class="space-y-3">${F('w_name','Campaign name *',I('w_name'))}${F('w_goal','Goal',SEL('w_goal',['Increase bookings','Win back customers','Promote a package','Reward loyal customers','Birthday / anniversary greeting','Other'],d.goal))}</div>`;
+        if(w.step===2)h=`<p class="text-slate-500 mb-3">Who should receive this campaign?</p><div class="grid sm:grid-cols-2 gap-2.5">${AUD.map(a=>{const n=a[2]().length;return `<label class="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${d.aud===a[0]?'border-teal-600 bg-teal-50':'border-slate-200 hover:bg-slate-50'}"><input type="radio" name="w_aud" value="${a[0]}" ${d.aud===a[0]?'checked':''} class="accent-teal-600"><span class="flex-1">${a[1]}</span><span class="text-xs text-slate-500">${n} customers</span></label>`}).join('')}</div><p id="e_w_aud" class="text-xs text-rose-600 mt-2 hidden"></p>`;
+        if(w.step===3)h=`<div class="${G}">${F('w_ch','Channel',SEL('w_ch',['WhatsApp','SMS','Email'],d.ch))}${F('w_tpl','Message template',SEL('w_tpl',[['','Custom message'],...templates.map(t=>[t.id,t.name])],d.tpl))}</div>
+          <div class="mt-3">${F('w_msg','Message *',`<textarea id="w_msg" rows="4" class="${inp}"></textarea>`)}${chips('w_msg')}</div>
+          <div class="grid sm:grid-cols-3 gap-3 mt-3"><div class="sm:col-span-3">${F('w_offer','Offer text (for {offer})',I('w_offer','text','placeholder="e.g. 20% off on Hair Spa"'))}</div>${F('w_code','Coupon code',I('w_code'))}${F('w_disc','Discount (20% or ₹500)',I('w_disc'))}${F('w_valid','Valid till',I('w_valid','date'))}</div>`;
+        if(w.step===4)h=`<div class="flex gap-4 mb-3">${['now','later'].map(k=>`<label class="flex items-center gap-2"><input type="radio" name="w_when" value="${k}" ${d.when===k?'checked':''} class="accent-teal-600">${k==='now'?'Send now':'Schedule for later'}</label>`).join('')}</div>
+          <div id="w_sched" class="grid grid-cols-2 gap-3 mb-3 ${d.when==='now'?'hidden':''}">${F('w_date','Date',I('w_date','date'))}${F('w_time','Time',I('w_time','time'))}</div>
+          <div class="grid sm:grid-cols-2 gap-4"><div class="text-sm space-y-1 text-slate-600"><p><b>${esc(d.name)}</b></p><p>Goal: ${esc(d.goal)}</p><p>Audience: ${audOf(d.aud)[1]} (${audOf(d.aud)[2]().length} customers)</p><p>Channel: ${d.ch}</p><p>Coupon: ${d.code?esc(d.code)+' · '+esc(d.disc||'—')+' · till '+fmtDate(d.valid):'None'}</p></div><div><p class="font-medium text-slate-700 mb-1">Preview</p>${bubble(fill(d.msg,vars()),d.ch)}</div></div>`;
+        $('ovBody').innerHTML=pills()+h;$('ovTitle').textContent=`Create campaign · Step ${w.step} of 4`;$('ovSubmit').textContent=w.step===4?(d.when==='now'?'Send Campaign':'Schedule Campaign'):'Next';$('ovBack').classList.toggle('hidden',w.step===1);
+        if(w.step===1)$('w_name').value=d.name;
+        if(w.step===3){$('w_msg').value=d.msg;$('w_offer').value=d.offer;$('w_code').value=d.code;$('w_disc').value=d.disc;$('w_valid').value=d.valid;
+          $('w_tpl').onchange=()=>{const t=tplOf($('w_tpl').value);if(t){$('w_msg').value=t.body;$('w_ch').value=t.channel}};}
+        if(w.step===4){$('w_date').value=d.date;$('w_time').value=d.time}
+        if(w.step!==2)focus1();
+      };
+      const vars=()=>{const r=audOf(w.d.aud)[2]()[0],v={validity:fmtDate(w.d.valid)};if(r)v.name=r.name.split(' ')[0];if(w.d.offer)v.offer=w.d.offer;if(w.d.code)v.code=w.d.code;return v};
+      const collect=()=>{const d=w.d,g=id=>$(id)?val(id):null;
+        if(w.step===1){d.name=g('w_name');d.goal=g('w_goal')}
+        if(w.step===2){const r=document.querySelector('input[name=w_aud]:checked');d.aud=r?r.value:''}
+        if(w.step===3)Object.assign(d,{ch:g('w_ch'),tpl:g('w_tpl'),msg:g('w_msg'),offer:g('w_offer'),code:g('w_code').toUpperCase(),disc:g('w_disc'),valid:g('w_valid')});
+        if(w.step===4){const r=document.querySelector('input[name=w_when]:checked');d.when=r.value;d.date=g('w_date');d.time=g('w_time')}};
+      modal('Create campaign','Next','',()=>{
+        collect();const d=w.d;let ok=true;
+        if(w.step===1)ok=bad('w_name',d.name?'':'Give the campaign a name.');
+        if(w.step===2)ok=bad('w_aud',d.aud?(audOf(d.aud)[2]().length?'':'No customers match this audience.'):'Choose an audience.');
+        if(w.step===3){ok=bad('w_msg',d.msg?'':'Write the message or pick a template.');ok=bad('w_valid',!d.code||d.valid>=TODAY?'':'Validity must be today or later.')&&ok}
+        if(w.step===4&&d.when==='later')ok=bad('w_date',d.date>=TODAY?'':'Pick today or a later date.');
+        if(!ok)return false;
+        if(w.step<4){w.step++;show();return false}
+        // Final step: create campaign (+ coupon)
+        const n=audOf(d.aud)[2]().length,now=d.when==='now';
+        campaigns.unshift({id:nextId(campaigns),name:d.name,goal:d.goal,channel:d.ch,audience:audOf(d.aud)[1],sentDate:now?TODAY:d.date,sent:now?n:0,queued:n,delivered:now?Math.round(n*.97):0,responses:0,redemptions:0,conversions:0,status:now?'Running':'Scheduled'});
+        if(d.code&&!coupons.some(c=>c.code===d.code))coupons.unshift({id:nextId(coupons),code:d.code,discount:d.disc||'—',used:0,expiry:d.valid});
+        pg.camp=1;pg.coupon=1;render();toast(now?`Campaign sent to ${n} customers`:`Campaign scheduled for ${fmtDate(d.date)} · ${n} recipients`)});
+      ovBack=()=>{collect();w.step--;show()};
+      $('ovBody').onchange=e=>{if(e.target.name==='w_aud'){collect();show()}if(e.target.name==='w_when'){w.d.when=e.target.value;$('w_sched').classList.toggle('hidden',w.d.when==='now');$('ovSubmit').textContent=w.d.when==='now'?'Send Campaign':'Schedule Campaign'}};
+      show();
+    }
+    render();
+  })();
+  </script>
+</body>
+</html>

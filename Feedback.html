@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feedback & Reviews · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <style>
+    /* ---- Page-level polish (works even without custom.css changes) ---- */
+    .fb-card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+    .fb-card:hover{transform:translateY(-3px);box-shadow:0 12px 24px -8px rgba(15,23,42,.18);border-color:#99d5cf}
+    .fb-card.is-complaint:hover{border-color:#fda4af}
+    .fb-card:focus-within{box-shadow:0 0 0 2px rgba(13,148,136,.25)}
+
+    /* Form controls: consistent height, focus ring, error state */
+    .fld{display:block;width:100%;margin-top:.375rem;padding:.55rem .75rem;min-height:2.5rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;color:#1e293b;font-size:.875rem;line-height:1.25rem;transition:border-color .15s,box-shadow .15s}
+    .fld:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,.18)}
+    .fld.err{border-color:#e11d48;box-shadow:0 0 0 3px rgba(225,29,72,.12)}
+    textarea.fld{min-height:6rem;resize:vertical}
+    .lbl{display:block;font-size:.8125rem;font-weight:500;color:#475569}
+    .field-err{margin-top:.25rem;font-size:.75rem;color:#e11d48}
+    .filter-bar label{display:flex;flex-direction:column;font-size:.8125rem;color:#64748b;min-width:9rem;flex:1 1 9rem;max-width:13rem}
+    .filter-bar .fld{margin-top:.25rem}
+
+    /* Overlay */
+    #ov{backdrop-filter:blur(2px)}
+    #ov.open{display:block}
+    #ovForm{animation:pop .18s ease-out}
+    @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+    body.ov-lock{overflow:hidden}
+
+    /* Pagination */
+    .pg-btn{min-width:2.25rem;height:2.25rem;padding:0 .6rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;color:#475569;font-size:.8125rem;font-weight:500;transition:background .15s,border-color .15s}
+    .pg-btn:hover:not(:disabled):not(.active){background:#f1f5f9}
+    .pg-btn.active{background:#0d9488;border-color:#0d9488;color:#fff}
+    .pg-btn:disabled{opacity:.4;cursor:not-allowed}
+
+    /* Sidebar collapse / expand (desktop) */
+    .app-wrap{transition:padding-left .25s ease}
+    #sbToggle{display:none}
+    @media (min-width:1024px){
+      #app-sidebar > *{transition:transform .25s ease}
+      body.sb-collapsed #app-sidebar > *{transform:translateX(-100%)}
+      body.sb-collapsed .app-wrap{padding-left:0 !important}
+      #sbToggle{display:grid;position:fixed;top:14px;left:calc(16rem - 14px);z-index:60;width:28px;height:28px;place-items:center;border-radius:9999px;background:#fff;border:1px solid #cbd5e1;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.12);transition:left .25s ease,background .15s}
+      #sbToggle:hover{background:#f1f5f9}
+      #sbToggle svg{transition:transform .25s ease}
+      body.sb-collapsed #sbToggle{left:10px}
+      body.sb-collapsed #sbToggle svg{transform:rotate(180deg)}
+    }
+  </style>
+</head>
+<body data-page="feedback" data-title="Feedback & Reviews">
+  <button id="sbToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse / expand sidebar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <!-- Shared sidebar + top bar are injected by layout.js -->
+  <div id="app-sidebar"></div>
+  <div class="app-wrap lg:pl-64 min-h-screen flex flex-col">
+    <div id="app-topbar"></div>
+    <main class="flex-1 p-4 lg:p-8 space-y-6">
+
+      <!-- Top summary: average, total, distribution, trend -->
+      <section class="grid lg:grid-cols-3 gap-4 lg:gap-6">
+        <div class="card p-5 flex gap-6 items-center lg:col-span-1">
+          <div class="text-center shrink-0"><p id="avg" class="text-5xl font-bold text-slate-800"></p><div id="avgStars" class="mt-1"></div><p id="total" class="text-xs text-slate-500 mt-1"></p></div>
+          <div id="dist" class="flex-1 space-y-1.5"></div>
+        </div>
+        <div class="card p-5 lg:col-span-2"><div class="flex items-center justify-between mb-2"><h3 class="font-semibold text-slate-800 text-sm">Satisfaction trend</h3><span class="text-xs text-slate-400">Average rating by month · all reviews</span></div><div class="h-40"><canvas id="trend"></canvas></div></div>
+      </section>
+
+      <!-- Complaints queue -->
+      <section id="queue"></section>
+
+      <!-- Filters + action -->
+      <div class="card p-4 filter-bar flex flex-wrap items-end gap-3 text-sm">
+        <label>Rating<select id="fRate" class="fld"><option value="">All</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
+        <label>Service<select id="fSvc" class="fld"></select></label>
+        <label>Therapist<select id="fTh" class="fld"></select></label>
+        <label>From<input id="fFrom" type="date" class="fld"></label>
+        <label>To<input id="fTo" type="date" class="fld"></label>
+        <label>Status<select id="fSt" class="fld"><option>All</option><option>Complaints</option><option>Resolved</option><option>Pending</option></select></label>
+        <div class="flex items-center gap-2 ml-auto">
+          <button id="fClear" type="button" class="px-4 h-10 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition">Clear</button>
+          <button id="reqBtn" type="button" class="btn-primary text-sm h-10">Send Feedback Request</button>
+        </div>
+      </div>
+
+      <!-- Feedback cards + pagination -->
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p id="count" class="text-sm text-slate-500"></p>
+        <label class="text-sm text-slate-500 flex items-center gap-2">Per page
+          <select id="pgSize" class="fld !mt-0 !w-auto !min-h-0 !py-1.5"><option>4</option><option selected>6</option><option>10</option><option>20</option></select>
+        </label>
+      </div>
+      <section id="cards" class="grid md:grid-cols-2 gap-4 lg:gap-5"></section>
+      <nav id="pager" class="flex flex-wrap items-center justify-between gap-3 pt-1" aria-label="Pagination"></nav>
+    </main>
+  </div>
+
+  <!-- Reusable overlay form (reply / google review / feedback request / complaint) -->
+  <div id="ov" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4" role="dialog" aria-modal="true" aria-labelledby="ovTitle">
+    <form id="ovForm" novalidate class="bg-white rounded-2xl mx-auto my-8 shadow-xl w-full max-w-xl">
+      <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100"><h3 id="ovTitle" class="text-lg font-semibold text-slate-800"></h3><button type="button" id="ovX" class="w-8 h-8 grid place-items-center rounded-full text-2xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Close">&times;</button></div>
+      <div id="ovBody" class="px-6 py-5 text-sm space-y-4"></div>
+      <div class="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50/60 rounded-b-2xl"><button type="button" id="ovCancel" class="px-4 h-10 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button type="submit" id="ovSubmit" class="btn-primary text-sm h-10"></button></div>
+    </form>
+  </div>
+  <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <!-- Compatibility + seed data -->
+  <script>
+  (function(){
+    const has=n=>{try{return (0,eval)('typeof '+n)!=='undefined'}catch(e){return false}};
+    const def=(n,v)=>{if(!has(n))window[n]=v};
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    def('addDaysISO',(s,n)=>{const[y,m,d]=s.split('-').map(Number);return iso(new Date(y,m-1,d+n))});
+    def('esc',s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])));
+    def('initialsOf',n=>String(n).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase());
+    def('avatarColor',n=>['bg-teal-600','bg-emerald-600','bg-sky-600','bg-violet-600','bg-amber-600','bg-rose-600'][[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0)%6]);
+    def('fmtDate',d=>d&&d!=='—'?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'—');
+    def('customers',[]);def('appointments',[]);def('feedback',[]);
+    def('services',[{name:'Swedish Massage'},{name:'Hair Spa'},{name:'Signature Facial'},{name:'Manicure'}]);
+    if(!has('therapists'))window.therapists=['Deepak Yadav','Lakshmi Narayan','Farah Shaikh'];
+    window.staffNames=has('staff')?staff.map(s=>s.name||s[0]):['Anjali Desai','Rajesh Khanna','Sunita Pillai'];
+    const T=addDaysISO(new Date().toISOString().slice(0,10),0),nm=i=>customers.length?customers[i%customers.length].name:'Customer '+i;
+    [[11,'Hair Spa',1,'Hair felt dry after the service and I was pushed to buy products.'],[14,'Signature Facial',5,'Glowing skin, the best facial I have had in Pune!'],[17,'Pedicure',3,'Good result but the room was cold.'],[5,'Aromatherapy',4,'Lovely ambience and a very calming therapist.']]
+      .forEach((x,k)=>{if(feedback.length<14)feedback.push({id:feedback.length+1,customer:nm(x[0]),service:x[1],rating:x[2],comment:x[3],date:T})});
+    const SRC=['In-person','WhatsApp','Google'],ST=['Resolved','Open','Resolved','In Progress','Open','Resolved','Open','Resolved','Open','Resolved','Open','Resolved','Resolved','Open'];
+    feedback.forEach((f,i)=>{
+      if(f.source)return;
+      f.date=addDaysISO(T,-(i*7+1));f.therapist=therapists[i%therapists.length];f.source=SRC[(i*2+1)%3];
+      f.complaint=i===3;
+      f.status=ST[i%ST.length];f.assigned=(f.rating<=2||f.complaint)?staffNames[i%staffNames.length]:'';f.note=f.status==='Resolved'?'Spoke to the customer and resolved.':'';
+      f.replies=f.status==='Resolved'?[{date:f.date,text:'Thank you for your feedback! We look forward to seeing you again.'}]:[];f.reviewRequested=false;
+    });
+    const done=appointments.filter(a=>a.status==='Completed').map(a=>({customer:a.customer,service:a.service,staff:a.staff,date:a.date>T?T:a.date}));
+    for(let k=0;done.length<8;k++)done.push({customer:nm(k*3+2),service:services[k%services.length].name,staff:therapists[k%therapists.length],date:addDaysISO(T,-(k+1))});
+    window.recentVisits=done.map((v,i)=>({id:i+1,...v,requested:false}));
+  })();
+  </script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;           // layout.js redirects to login
+    const $=id=>document.getElementById(id);
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0);
+    let chart,tt,page=1,pageSize=+$('pgSize').value;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2800)};
+    const isComplaint=f=>f.rating<=2||f.complaint;
+    const SRC={'In-person':'bg-slate-200 text-slate-700',WhatsApp:'bg-green-100 text-green-700',Google:'bg-blue-100 text-blue-700'};
+    const stars=n=>`<span class="text-amber-400 tracking-tight" aria-label="${n} out of 5">${'★'.repeat(n)}<span class="text-slate-300">${'★'.repeat(5-n)}</span></span>`;
+    const statusLabel=f=>isComplaint(f)?f.status:(f.status==='Resolved'?'Resolved':'Pending');
+    const SB={Open:'badge-lost','In Progress':'badge-vip',Resolved:'badge-active',Pending:'badge-new'};
+    const first=n=>String(n).split(' ')[0];
+    const F=id=>feedback.find(f=>f.id==id);
+
+    // ---------- Sidebar collapse / expand ----------
+    const tgl=$('sbToggle');
+    const setSb=c=>{document.body.classList.toggle('sb-collapsed',c);tgl.setAttribute('aria-expanded',String(!c));tgl.setAttribute('aria-label',c?'Expand sidebar':'Collapse sidebar');try{localStorage.setItem('sbCollapsed',c?'1':'0')}catch(e){}
+      if(chart)setTimeout(()=>chart.resize(),280)};
+    tgl.onclick=()=>setSb(!document.body.classList.contains('sb-collapsed'));
+    try{if(localStorage.getItem('sbCollapsed')==='1')setSb(true)}catch(e){}
+
+    // ---------- Overlay form helpers ----------
+    let ovSubmit=null,lastFocus=null;
+    const val=id=>$(id).value.trim();
+    // show/clear an inline error under a field; returns true when valid
+    function check(id,msg){const el=$(id),e=$('e_'+id);if(e){e.textContent=msg||'';e.classList.toggle('hidden',!msg)}el.classList.toggle('err',!!msg);if(el.setAttribute)el.setAttribute('aria-invalid',msg?'true':'false');return !msg}
+    function modal(title,submit,html,fn){lastFocus=document.activeElement;$('ovTitle').textContent=title;$('ovSubmit').textContent=submit;$('ovBody').innerHTML=html;ovSubmit=fn;
+      $('ov').classList.remove('hidden');document.body.classList.add('ov-lock');
+      const f=$('ovBody').querySelector('textarea,select,input:not([type=checkbox])');if(f)setTimeout(()=>f.focus(),30)}
+    const closeOv=()=>{$('ov').classList.add('hidden');document.body.classList.remove('ov-lock');ovSubmit=null;if(lastFocus&&lastFocus.focus)lastFocus.focus()};
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;
+    $('ov').addEventListener('mousedown',e=>{if(e.target===$('ov'))closeOv()});
+    $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
+    $('ovBody').addEventListener('input',e=>{if(e.target.id&&$('e_'+e.target.id))check(e.target.id,'')});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('ov').classList.contains('hidden'))closeOv()});
+    const bubble=txt=>`<div class="rounded-xl p-3" style="background:#e5ddd5"><div class="ml-auto max-w-[92%] rounded-lg rounded-tr-none px-3 py-2 text-[13px] text-slate-800 shadow-sm" style="background:#d9fdd3"><p class="whitespace-pre-line break-words">${esc(txt)}</p><p class="text-[10px] text-slate-500 text-right mt-1">10:30 ✓✓</p></div></div>`;
+
+    // ---------- Filters ----------
+    $('fSvc').innerHTML='<option value="">All</option>'+[...new Set([...services.map(s=>s.name),...feedback.map(f=>f.service)])].sort().map(s=>`<option>${esc(s)}</option>`).join('');
+    $('fTh').innerHTML='<option value="">All</option>'+therapists.map(t=>`<option>${esc(t)}</option>`).join('');
+    const ids=['fRate','fSvc','fTh','fFrom','fTo','fSt'];
+    ids.forEach(i=>$(i).onchange=()=>{page=1;render()});
+    $('fClear').onclick=()=>{ids.forEach(i=>$(i).value=i==='fSt'?'All':'');page=1;render()};
+    $('pgSize').onchange=e=>{pageSize=+e.target.value;page=1;render()};
+    const filtered=()=>{const r=$('fRate').value,s=$('fSvc').value,t=$('fTh').value,a=$('fFrom').value,b=$('fTo').value,st=$('fSt').value;
+      return feedback.filter(f=>(!r||f.rating==r)&&(!s||f.service===s)&&(!t||f.therapist===t)&&(!a||f.date>=a)&&(!b||f.date<=b)&&
+        (st==='All'||(st==='Complaints'&&isComplaint(f))||(st==='Resolved'&&f.status==='Resolved')||(st==='Pending'&&f.status!=='Resolved'))).sort((x,y)=>y.date.localeCompare(x.date)||y.id-x.id)};
+
+    // ---------- Pagination ----------
+    function pageList(cur,total){
+      if(total<=7)return Array.from({length:total},(_,i)=>i+1);
+      const s=new Set([1,total,cur-1,cur,cur+1]);const a=[...s].filter(p=>p>=1&&p<=total).sort((x,y)=>x-y),out=[];
+      a.forEach((p,i)=>{if(i&&p-a[i-1]>1)out.push('…');out.push(p)});return out}
+    function renderPager(total){
+      const pages=Math.max(1,Math.ceil(total/pageSize)),from=total?(page-1)*pageSize+1:0,to=Math.min(page*pageSize,total);
+      $('pager').innerHTML=total?`<p class="text-sm text-slate-500">Showing ${from}–${to} of ${total}</p>
+        <div class="flex items-center gap-1.5">
+          <button class="pg-btn" data-p="${page-1}" ${page<=1?'disabled':''} aria-label="Previous page">‹ Prev</button>
+          ${pageList(page,pages).map(p=>p==='…'?'<span class="px-1 text-slate-400">…</span>':`<button class="pg-btn ${p===page?'active':''}" data-p="${p}" ${p===page?'aria-current="page"':''}>${p}</button>`).join('')}
+          <button class="pg-btn" data-p="${page+1}" ${page>=pages?'disabled':''} aria-label="Next page">Next ›</button>
+        </div>`:'';
+    }
+    $('pager').addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b||b.disabled)return;page=+b.dataset.p;render();$('cards').scrollIntoView({behavior:'smooth',block:'start'})});
+
+    // ---------- Render ----------
+    function render(){
+      const n=feedback.length,avg=n?feedback.reduce((a,f)=>a+f.rating,0)/n:0;
+      $('avg').textContent=avg.toFixed(1);$('total').textContent=`${n} reviews`;
+      $('avgStars').innerHTML=`<span class="relative inline-block text-slate-300 text-xl leading-none">★★★★★<span class="absolute inset-y-0 left-0 overflow-hidden whitespace-nowrap text-amber-400" style="width:${avg/5*100}%">★★★★★</span></span>`;
+      const COL={5:'bg-emerald-500',4:'bg-teal-500',3:'bg-amber-400',2:'bg-orange-500',1:'bg-rose-500'};
+      $('dist').innerHTML=[5,4,3,2,1].map(r=>{const c=feedback.filter(f=>f.rating===r).length;return `<div class="flex items-center gap-2 text-xs"><span class="w-6 text-slate-500">${r} ★</span><div class="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full ${COL[r]}" style="width:${n?c/n*100:0}%"></div></div><span class="w-5 text-right text-slate-500">${c}</span></div>`}).join('');
+
+      if(typeof Chart!=='undefined'){const mk=[];for(let i=5;i>=0;i--){const d=new Date(TODAY);d.setDate(1);d.setMonth(d.getMonth()-i);mk.push(d.toISOString().slice(0,7))}
+        const data=mk.map(m=>{const a=feedback.filter(f=>f.date.startsWith(m));return a.length?+(a.reduce((x,f)=>x+f.rating,0)/a.length).toFixed(2):null});
+        const labels=mk.map(m=>new Date(m+'-15').toLocaleDateString('en-IN',{month:'short',year:'2-digit'}));
+        if(!chart)chart=new Chart($('trend'),{type:'line',data:{labels,datasets:[{label:'Avg rating',data,borderColor:'#0d9488',backgroundColor:'rgba(13,148,136,.12)',fill:true,tension:.35,spanGaps:true,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:1,max:5,ticks:{stepSize:1}}}}});
+        else{chart.data.labels=labels;chart.data.datasets[0].data=data;chart.update()}}
+
+      // Complaints queue: summary cards, edit/resolve happens in the overlay form
+      const open=feedback.filter(f=>isComplaint(f)&&f.status!=='Resolved');
+      $('queue').innerHTML=`<div class="rounded-xl border border-rose-200 bg-rose-50/50 p-4 lg:p-5"><div class="flex items-center gap-2 mb-4"><span class="text-lg">🚩</span><h3 class="font-semibold text-rose-800">Complaints needing attention</h3><span class="badge badge-lost">${open.length}</span></div>
+        ${open.length?`<div class="grid lg:grid-cols-2 gap-4">${open.map(f=>`<div class="fb-card is-complaint bg-white rounded-lg border border-rose-200 p-4 flex flex-col gap-2.5" data-c="${f.id}">
+          <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-semibold text-slate-800 truncate">${esc(f.customer)}</p><p class="text-xs text-slate-500">${esc(f.service)} · ${fmtDate(f.date)}</p></div>${stars(f.rating)}</div>
+          <p class="text-slate-600 text-sm flex-1">“${esc(f.comment)}”</p>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1"><div class="flex flex-wrap items-center gap-2"><span class="badge ${SB[f.status]}">${f.status}</span><span class="text-xs text-slate-500">${f.assigned?'Assigned to '+esc(f.assigned):'Unassigned'}</span></div>
+          <button data-resolve class="px-3 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition">Update / Resolve</button></div></div>`).join('')}</div>`:'<p class="text-sm text-slate-500">No open complaints. Nice work! 🎉</p>'}</div>`;
+
+      // Feedback cards (paginated)
+      const list=filtered(),pages=Math.max(1,Math.ceil(list.length/pageSize));if(page>pages)page=pages;
+      const slice=list.slice((page-1)*pageSize,page*pageSize);
+      $('count').textContent=`${list.length} of ${n} reviews match`;
+      $('cards').innerHTML=slice.map(f=>{const c=isComplaint(f),s=statusLabel(f),last=f.replies[f.replies.length-1];
+        return `<article data-id="${f.id}" class="fb-card card p-5 flex flex-col gap-3 ${c?'is-complaint border-l-4 !border-l-rose-500':''}">
+          <div class="flex items-start gap-3"><span class="w-10 h-10 shrink-0 rounded-full ${avatarColor(f.customer)} text-white text-sm font-semibold grid place-items-center">${initialsOf(f.customer)}</span>
+            <div class="flex-1 min-w-0"><p class="font-semibold text-slate-800 truncate">${c?'🚩 ':''}${esc(f.customer)}</p><p class="text-xs text-slate-500 truncate">${esc(f.service)} · ${esc(f.therapist)}</p></div>
+            <div class="text-right shrink-0"><div>${stars(f.rating)}</div><p class="text-xs text-slate-400 mt-0.5">${fmtDate(f.date)}</p></div></div>
+          <p class="text-slate-700 text-sm flex-1">“${esc(f.comment)}”</p>
+          <div class="flex flex-wrap items-center gap-2"><span class="badge ${SRC[f.source]||''}">${esc(f.source)}</span><span class="badge ${SB[s]}">${s}</span>${c?'<span class="badge badge-lost">Complaint</span>':''}${f.reviewRequested?'<span class="badge badge-new">Review requested</span>':''}</div>
+          ${last?`<p class="text-xs bg-slate-50 rounded-lg px-3 py-2 text-slate-600"><b>You replied</b> (${fmtDate(last.date)}): ${esc(last.text)}</p>`:''}
+          <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100"><button data-a="reply" class="text-xs px-3 h-8 rounded-lg border border-slate-300 hover:bg-slate-50 transition">Reply</button>
+            ${f.rating>=4?`<button data-a="google" class="text-xs px-3 h-8 rounded-lg border border-slate-300 hover:bg-slate-50 transition">Request Google Review</button>`:''}
+            ${f.status!=='Resolved'?`<button data-a="resolve" class="text-xs px-3 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition">Mark as resolved</button>`:''}
+            ${!c&&f.status!=='Resolved'?`<button data-a="flag" class="text-xs px-2 h-8 text-rose-600 hover:underline ml-auto">Flag as complaint</button>`:''}</div></article>`}).join('')||'<p class="text-slate-400 py-10 text-center md:col-span-2">No reviews match your filters.</p>';
+      renderPager(list.length);
+    }
+
+    // ---------- Complaint overlay form (status, assignee, note) ----------
+    function complaintForm(f){
+      modal(`Resolve complaint · ${f.customer}`,'Save',`
+        <div class="rounded-lg bg-slate-50 p-3"><div class="flex items-center justify-between gap-2 mb-1"><p class="font-medium text-slate-700">${esc(f.service)} · ${fmtDate(f.date)}</p>${stars(f.rating)}</div><p class="text-slate-600">“${esc(f.comment)}”</p></div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div><label class="lbl" for="c_status">Status</label><select id="c_status" class="fld"><option ${f.status==='Open'?'selected':''}>Open</option><option ${f.status==='In Progress'?'selected':''}>In Progress</option><option>Resolved</option></select></div>
+          <div><label class="lbl" for="c_assigned">Assigned to</label><select id="c_assigned" class="fld"><option value="">Unassigned</option>${staffNames.map(s=>`<option ${s===f.assigned?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        </div>
+        <div><label class="lbl" for="c_note">Resolution note</label><textarea id="c_note" rows="3" class="fld" placeholder="What was done to resolve this?">${esc(f.note)}</textarea><p id="e_c_note" class="field-err hidden"></p></div>`,()=>{
+        const st=$('c_status').value;
+        if(st==='Resolved'&&!check('c_note',val('c_note')?'':'Write a resolution note before resolving.'))return false;
+        check('c_note','');f.status=st;f.assigned=$('c_assigned').value;f.note=val('c_note');
+        if(st==='Resolved'&&!f.assigned)f.assigned=staffNames[0];
+        render();toast(st==='Resolved'?`Complaint from ${f.customer} resolved`:'Complaint updated')});
+    }
+    $('queue').addEventListener('click',e=>{if(!e.target.closest('[data-resolve]'))return;complaintForm(F(e.target.closest('[data-c]').dataset.c))});
+
+    // ---------- Card actions ----------
+    $('cards').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const f=F(b.closest('[data-id]').dataset.id),a=b.dataset.a;
+      if(a==='flag'){f.complaint=true;if(f.status==='Resolved')f.status='Open';render();toast('Flagged as complaint')}
+      else if(a==='resolve'){if(isComplaint(f))complaintForm(f);else{f.status='Resolved';render();toast('Marked as resolved')}}
+      else if(a==='reply'){const def=f.rating>=4?`Hi ${first(f.customer)}, thank you for the lovely feedback on your ${f.service}! We can't wait to see you again. 🌿`:`Hi ${first(f.customer)}, we're sorry your ${f.service} wasn't perfect. Our manager will call you today to make it right.`;
+        modal(`Reply to ${f.customer}`,'Send Reply',`<p class="text-slate-500">“${esc(f.comment)}”</p><div><label class="lbl" for="r_text">Your reply (WhatsApp)</label><textarea id="r_text" rows="4" class="fld"></textarea><p id="e_r_text" class="field-err hidden"></p></div>`,()=>{
+          if(!check('r_text',val('r_text')?'':'Write a reply.'))return false;f.replies.push({date:TODAY,text:val('r_text')});
+          if(isComplaint(f)){if(f.status==='Open')f.status='In Progress'}else f.status='Resolved';render();toast(`Reply sent to ${f.customer}`)});$('r_text').value=def}
+      else if(a==='google'){const msg=`Hi ${first(f.customer)}, thank you for visiting Serenity Spa! We're so glad you enjoyed your ${f.service}. 🌿\nCould you take 30 seconds to share it as a Google review?\n⭐ https://g.page/r/serenity-spa/review`;
+        modal('Request Google Review','Send on WhatsApp',`<p class="text-slate-500">Message to ${esc(f.customer)}:</p>${bubble(msg)}`,()=>{f.reviewRequested=true;render();toast(`Google review request sent to ${f.customer}`)})}
+    });
+
+    // ---------- Send Feedback Request ----------
+    $('reqBtn').onclick=()=>{
+      const msg=`Hi {name}, thank you for visiting Serenity Spa! How was your {service}? Reply with a rating from 1 to 5 or tap: https://serenity.in/feedback`;
+      modal('Send feedback request','Send Request',`<p class="text-slate-500">Customers who recently completed a service:</p>
+        <div><label class="flex items-center gap-2 mb-2 font-medium text-slate-700"><input type="checkbox" id="q_all" class="accent-teal-600 w-4 h-4"> Select all</label>
+        <div class="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-60 overflow-y-auto">${recentVisits.map(v=>`<label class="flex items-center gap-3 px-3 py-2.5 ${v.requested?'opacity-50':'cursor-pointer hover:bg-slate-50'}"><input type="checkbox" class="q_chk accent-teal-600 w-4 h-4" value="${v.id}" ${v.requested?'disabled':''}><span class="flex-1"><b>${esc(v.customer)}</b><br><span class="text-xs text-slate-500">${esc(v.service)} · ${fmtDate(v.date)}</span></span>${v.requested?'<span class="text-xs text-slate-500">Sent</span>':''}</label>`).join('')}</div>
+        <p id="e_q_all" class="field-err hidden"></p></div>
+        <div><p class="lbl mb-1">Message preview</p>${bubble(msg.replace('{name}','Priya').replace('{service}','Hair Spa'))}</div>`,()=>{
+        const sel=[...document.querySelectorAll('.q_chk:checked')].map(c=>+c.value);if(!check('q_all',sel.length?'':'Select at least one customer.'))return false;
+        recentVisits.forEach(v=>{if(sel.includes(v.id))v.requested=true});toast(`Feedback request sent to ${sel.length} customer${sel.length>1?'s':''}`)});
+      $('q_all').onchange=e=>{document.querySelectorAll('.q_chk:not(:disabled)').forEach(c=>c.checked=e.target.checked);check('q_all','')};
+      $('ovBody').addEventListener('change',e=>{if(e.target.classList.contains('q_chk'))check('q_all','')});
+    };
+    render();
+  })();
+  </script>
+</body>
+</html>

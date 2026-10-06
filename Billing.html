@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Billing & Payments · Serenity CRM</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <style>
+    .fi{width:100%;margin-top:.25rem;padding:.375rem .625rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;font-size:.875rem}
+    .fi:focus{outline:none;border-color:#0d9488}
+    /* Print: show only the invoice overlay, flattened to a normal page */
+    @media print{
+      body>*:not(#inv){display:none!important}
+      #inv{position:static!important;background:none!important;padding:0!important;overflow:visible!important;display:block!important}
+      #invBox{box-shadow:none!important;margin:0!important;max-width:none!important;padding:0!important;border-radius:0!important}
+      .no-print{display:none!important}
+    }
+  </style>
+</head>
+<body data-page="billing" data-title="Billing & Payments">
+  <div id="app-sidebar"></div>
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
+    <div id="app-topbar"></div>
+    <main class="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-6 space-y-4">
+      <section id="summary" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></section>
+      <div id="tabs" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm max-w-full overflow-x-auto shadow-sm">
+        <button data-t="new" class="px-4 py-1 rounded-lg whitespace-nowrap">New invoice</button><button data-t="all" class="px-4 py-1 rounded-lg whitespace-nowrap">All invoices</button><button data-t="due" class="px-4 py-1 rounded-lg whitespace-nowrap">Outstanding payments</button>
+      </div>
+
+      <!-- TAB 1: New invoice -->
+      <section id="pNew" class="grid lg:grid-cols-3 gap-3 items-start">
+        <div class="lg:col-span-2 space-y-3">
+          <div class="card p-4"><h3 class="card-title mb-3">Customer &amp; date</h3>
+            <div class="grid sm:grid-cols-3 gap-3 text-sm">
+              <div><label class="font-medium text-slate-700" for="cust">Customer *</label><input id="cust" list="custList" placeholder="Type to search" autocomplete="off" class="fi"><p id="eCust" class="text-xs text-rose-600 mt-1 hidden"></p></div>
+              <div><label class="font-medium text-slate-700" for="idate">Invoice date</label><input id="idate" type="date" class="fi"></div>
+              <div><label class="font-medium text-slate-700" for="staff">Therapist / staff</label><select id="staff" class="fi"></select></div>
+            </div><p id="memInfo" class="text-sm text-teal-700 mt-3 hidden"></p></div>
+          <div class="card p-4"><div class="flex flex-wrap items-center justify-between gap-2 mb-3"><h3 class="card-title">Items</h3>
+            <div class="flex gap-2"><button id="addSvc" class="btn-ghost !text-sm">+ Service</button><button id="addPrd" class="btn-ghost !text-sm">+ Product</button></div></div>
+            <div id="lines" class="space-y-2"></div><p id="eLines" class="text-xs text-rose-600 mt-2 hidden"></p></div>
+          <div class="card p-4"><h3 class="card-title mb-3">Payment</h3>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm items-end">
+              <div><label class="font-medium text-slate-700" for="mode">Payment mode</label><select id="mode" class="fi"><option>Cash</option><option>UPI</option><option>Card</option><option>Wallet</option><option>Split</option></select></div>
+              <div id="paidBox"><label class="font-medium text-slate-700" for="paid">Amount paid (₹)</label><input id="paid" type="number" min="0" class="fi"></div>
+              <div id="splitBox" class="hidden sm:col-span-2 grid grid-cols-2 gap-3"><div><label class="font-medium text-slate-700" for="sCash">Cash (₹)</label><input id="sCash" type="number" min="0" class="fi"></div><div><label class="font-medium text-slate-700" for="sUpi">UPI (₹)</label><input id="sUpi" type="number" min="0" class="fi"></div></div>
+              <div class="rounded-lg bg-slate-50 border border-slate-100 px-3 py-1.5"><p class="text-xs text-slate-500">Balance due</p><p id="bal" class="text-base font-bold text-slate-800"></p></div>
+              <div class="rounded-lg bg-slate-50 border border-slate-100 px-3 py-1.5"><p class="text-xs text-slate-500 mb-0.5">Status</p><span id="pstat" class="badge"></span></div>
+            </div><p id="ePaid" class="text-xs text-rose-600 mt-2 hidden"></p></div>
+        </div>
+        <!-- Summary -->
+        <div class="card p-4 space-y-3 lg:sticky lg:top-[4.5rem]">
+          <h3 class="card-title">Summary</h3>
+          <div class="text-sm space-y-3">
+            <div><label class="font-medium text-slate-700" for="dval">Discount</label><div class="flex gap-2 mt-1"><input id="dval" type="number" min="0" value="0" class="fi !mt-0 flex-1 min-w-0"><select id="dtype" class="fi !mt-0 !w-16"><option>₹</option><option>%</option></select></div></div>
+            <div><label class="font-medium text-slate-700" for="coupon">Coupon code</label><div class="flex gap-2 mt-1"><input id="coupon" placeholder="WELCOME10" class="fi !mt-0 flex-1 min-w-0 uppercase"><button id="applyCp" type="button" class="btn-ghost !text-sm">Apply</button></div><p id="cpMsg" class="text-xs mt-1 text-slate-500">Try WELCOME10, SPA500 or FESTIVE15.</p></div>
+            <div><label class="font-medium text-slate-700" for="gst">GST %</label><input id="gst" type="number" min="0" max="28" value="18" class="fi"></div>
+          </div>
+          <dl id="totals" class="text-sm space-y-1.5 border-t border-slate-100 pt-3"></dl>
+          <div class="grid gap-2"><button id="saveBtn" class="btn-primary text-sm !py-2">Save invoice</button><button id="printBtn" class="btn-ghost !text-sm !py-2">Save &amp; print</button><button id="waBtn" class="px-3 py-2 rounded-lg border border-emerald-300 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition">Send on WhatsApp</button></div>
+        </div>
+      </section>
+
+      <!-- TAB 2: All invoices -->
+      <section id="pAll" class="space-y-3 hidden">
+        <div class="card p-3 flex flex-wrap gap-2.5 text-sm items-center">
+          <label class="text-slate-500" for="fFrom">From</label><input id="fFrom" type="date" class="fi !mt-0 !w-auto"><label class="text-slate-500" for="fTo">To</label><input id="fTo" type="date" class="fi !mt-0 !w-auto">
+          <select id="fStat" class="fi !mt-0 !w-auto"><option value="">All statuses</option><option>Paid</option><option>Partial</option><option>Unpaid</option></select>
+          <select id="fMode" class="fi !mt-0 !w-auto"><option value="">All payment modes</option><option>Cash</option><option>UPI</option><option>Card</option><option>Wallet</option><option>Split</option></select>
+          <button id="fClear" class="text-teal-700 font-semibold hover:underline">Clear filters</button></div>
+        <div class="card overflow-hidden"><div class="overflow-x-auto"><table class="data-table"><thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="ta-r">Total</th><th class="ta-r">Paid</th><th class="ta-r">Balance</th><th>Mode</th><th>Status</th><th class="ta-r">Actions</th></tr></thead><tbody id="invRows"></tbody></table></div></div>
+      </section>
+
+      <!-- TAB 3: Outstanding -->
+      <section id="pDue" class="hidden"><div class="card overflow-hidden"><div class="overflow-x-auto"><table class="data-table"><thead><tr><th>Customer</th><th>Invoices</th><th class="ta-r">Due amount</th><th>Days overdue</th><th class="ta-r">Actions</th></tr></thead><tbody id="dueRows"></tbody></table></div></div></section>
+    </main>
+  </div>
+
+  <!-- Invoice modal (printable) -->
+  <div id="inv" class="fixed inset-0 z-[70] hidden bg-slate-900/50 overflow-y-auto p-4"><div id="invBox" class="bg-white rounded-xl mx-auto my-6 p-6 shadow-xl w-full max-w-2xl"><div id="invBody"></div>
+    <div class="no-print flex justify-end gap-2 mt-5"><button id="invClose" class="px-4 py-2 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50">Close</button><button id="invPrint" class="btn-primary text-sm">Print</button></div></div></div>
+  <!-- Generic form overlay -->
+  <div id="ov" class="fixed inset-0 z-[75] hidden bg-slate-900/50 overflow-y-auto p-4"><form id="ovForm" novalidate class="bg-white rounded-xl mx-auto my-8 shadow-xl w-full max-w-md overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100"><h3 id="ovTitle" class="text-base font-semibold text-slate-800"></h3><button type="button" id="ovX" class="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label="Close">&times;</button></div>
+    <div id="ovBody" class="text-sm p-5 space-y-3"></div>
+    <div class="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50"><button type="button" id="ovCancel" class="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm hover:bg-slate-50">Cancel</button><button id="ovSubmit" class="btn-primary text-sm"></button></div></form></div>
+  <datalist id="custList"></datalist>
+  <div id="toast" class="fixed bottom-5 right-5 z-[90] hidden bg-slate-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg"></div>
+
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/layout.js"></script>
+  <script>
+  (function(){
+    if(!localStorage.getItem('crmUser'))return;
+    const $=id=>document.getElementById(id), val=id=>$(id).value.trim(), num=id=>+$(id).value||0;
+    const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0), MONTH=TODAY.slice(0,7);
+    const COUPONS={WELCOME10:{type:'%',v:10},SPA500:{type:'₹',v:500},FESTIVE15:{type:'%',v:15}};
+    const STAT={Paid:'badge-active',Partial:'badge-vip',Unpaid:'badge-lost'};
+    let tab='new', lines=[], coupon=null, paidTouched=false, tt;
+    const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2800)};
+    const bad=(id,m)=>{const e=$(id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
+    const mob=n=>(customers.find(c=>c.name===n)||{}).mobile;
+
+    // ---------- Enrich mock invoices (items, paid, balance) ----------
+    invoices.forEach(i=>{const tot=i.amount+i.gst, s=services.find(x=>x.price===i.amount);
+      i.items??=[{type:'service',name:s?s.name:'Service',qty:1,price:i.amount}]; i.total=tot; i.discount??=0; i.gstPct??=18; i.staff??=therapists[0];
+      if(i.paid===undefined){i.paid=i.status==='Paid'?tot:(i.id.endsWith('4')?Math.round(tot*.4):0)} i.balance=tot-i.paid; i.status=i.balance<=0?'Paid':i.paid>0?'Partial':'Unpaid'});
+    [['INV-0997',names[5],'2026-09-14',3800],['INV-0998',names[11],'2026-09-22',2500]].forEach(([id,c,d,a])=>{ // older dues for the Outstanding tab
+      invoices.push({id,customer:c,date:d,amount:a,gst:Math.round(a*.18),total:a+Math.round(a*.18),paid:0,balance:a+Math.round(a*.18),mode:'Cash',status:'Unpaid',discount:0,gstPct:18,staff:therapists[1],items:[{type:'service',name:'Body Scrub & Wrap',qty:1,price:a}]})});
+    const payments=invoices.filter(i=>i.paid>0).map(i=>({date:i.date,amount:i.paid}));
+    const memUsed={}; // sessions consumed in this browser session
+    const memOf=name=>{const c=customers.find(x=>x.name===name),m=c&&memberships.find(x=>x.customer===name&&x.status==='Active');
+      if(!m)return null;const total=[8,12,20][m.id%3],used=(m.id*3+c.id)%total+(memUsed[m.id]||0);return{...m,total,left:total-used}};
+
+    // ---------- Overlay form ----------
+    let ovSubmit; const closeOv=()=>$('ov').classList.add('hidden');
+    function modal(title,html,submit,fn){$('ovTitle').textContent=title;$('ovBody').innerHTML=html;$('ovSubmit').textContent=submit;ovSubmit=fn;$('ov').classList.remove('hidden')}
+    $('ovX').onclick=$('ovCancel').onclick=closeOv;$('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit()!==false)closeOv()};
+
+    // ---------- Summary ----------
+    function renderSummary(){
+      const card=(l,v,s)=>`<div class="card card-hover p-4"><p class="text-sm text-slate-500">${l}</p><p class="text-xl font-bold text-slate-800 mt-0.5">${fmtINR(v)}</p><p class="text-xs text-slate-400 mt-0.5">${s}</p></div>`;
+      $('summary').innerHTML=card("Today's collection",payments.filter(p=>p.date===TODAY).reduce((a,p)=>a+p.amount,0),'payments received today')+
+        card('Pending dues',invoices.reduce((a,i)=>a+i.balance,0),invoices.filter(i=>i.balance>0).length+' open invoices')+
+        card('Monthly revenue',invoices.filter(i=>i.date.startsWith(MONTH)).reduce((a,i)=>a+i.total,0),'invoiced this month');
+    }
+
+    // ---------- New invoice: lines + live calculation ----------
+    $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+    $('staff').innerHTML=staff.map(s=>`<option>${esc(s.name)}</option>`).join(''); $('idate').value=TODAY;
+    const activeServices=()=>services.filter(s=>s.active);
+    const addLine=type=>{const src=type==='service'?activeServices()[0]:products[0];lines.push({type,name:src.name,qty:1,price:src.price,useMem:false});renderLines()};
+    const totals=()=>{
+      const sub=lines.reduce((a,l)=>a+(l.useMem?0:l.qty*l.price),0), manual=$('dtype').value==='%'?sub*num('dval')/100:num('dval');
+      const cp=coupon?(coupon.type==='%'?sub*coupon.v/100:coupon.v):0, disc=Math.min(sub,manual+cp), taxable=Math.round(sub-disc);
+      const total=Math.round(taxable*(1+num('gst')/100));
+      return{sub,manual,cp,disc,amount:taxable,tax:total-taxable,total};
+    };
+    function renderLines(){
+      const m=memOf(val('cust')), usedNow=lines.filter(l=>l.useMem).length;
+      $('lines').innerHTML=lines.length?lines.map((l,i)=>{
+        const opts=(l.type==='service'?activeServices():products).map(x=>`<option ${x.name===l.name?'selected':''}>${esc(x.name)}</option>`).join('');
+        return `<div class="border border-slate-200 rounded-lg p-2.5 hover:border-teal-300 transition"><div class="grid grid-cols-12 gap-2 items-center text-sm">
+          <span class="col-span-12 sm:col-span-2"><span class="badge ${l.type==='service'?'badge-active':'badge-vip'}">${l.type==='service'?'Service':'Product'}</span></span>
+          <select data-i="${i}" data-f="name" aria-label="Item" class="fi !mt-0 col-span-12 sm:col-span-4">${opts}</select>
+          <input data-i="${i}" data-f="qty" type="number" min="1" value="${l.qty}" aria-label="Quantity" title="Quantity" class="fi !mt-0 col-span-3 sm:col-span-1 text-center">
+          <input data-i="${i}" data-f="price" type="number" min="0" value="${l.price}" aria-label="Price" title="Price" class="fi !mt-0 col-span-4 sm:col-span-2">
+          <span data-amt="${i}" class="col-span-4 sm:col-span-2 text-right font-semibold text-slate-800"></span>
+          <button type="button" data-rm="${i}" title="Remove item" aria-label="Remove item" class="col-span-1 text-slate-400 hover:text-rose-600 text-xl leading-none text-center">&times;</button></div>
+          ${l.type==='service'&&m?`<label class="flex items-center gap-2 mt-2 text-xs text-teal-700"><input type="checkbox" data-i="${i}" data-f="useMem" ${l.useMem?'checked':''} ${!l.useMem&&usedNow>=m.left?'disabled':''} class="rounded border-slate-300 text-teal-600">Use membership session (${m.plan}: ${m.left-usedNow} left after this invoice)</label>`:''}</div>`}).join('')
+        :'<p class="py-5 text-center text-sm text-slate-500">No items yet. Add a service or product to start the invoice.</p>';
+      calc();
+    }
+    function calc(){
+      const t=totals(); lines.forEach((l,i)=>{const e=document.querySelector(`[data-amt="${i}"]`);if(e)e.textContent=l.useMem?'₹0 (plan)':fmtINR(l.qty*l.price)});
+      const row=(l,v,c='')=>`<div class="flex justify-between ${c}"><dt class="text-slate-500">${l}</dt><dd class="font-medium">${v}</dd></div>`;
+      $('totals').innerHTML=row('Subtotal',fmtINR(t.sub))+row('Discount','− '+fmtINR(Math.round(t.manual)),t.manual?'':'hidden')+row('Coupon '+(coupon?coupon.code:''),'− '+fmtINR(Math.round(t.cp)),coupon?'text-emerald-700':'hidden')+row(`GST (${num('gst')}%)`,fmtINR(t.tax))+
+        `<div class="flex justify-between text-base font-bold text-slate-800 border-t border-slate-100 pt-2"><dt>Grand total</dt><dd>${fmtINR(t.total)}</dd></div>`;
+      const split=$('mode').value==='Split'; $('splitBox').classList.toggle('hidden',!split);$('paidBox').classList.toggle('hidden',split);
+      if(split)$('paid').value=num('sCash')+num('sUpi'); else if(!paidTouched)$('paid').value=t.total;
+      const paid=num('paid'), bal=Math.max(0,t.total-paid), st=bal<=0?'Paid':paid>0?'Partial':'Unpaid';
+      $('bal').textContent=fmtINR(bal);$('pstat').textContent=st;$('pstat').className='badge '+STAT[st];
+      return{...t,paid,bal,st};
+    }
+    $('addSvc').onclick=()=>addLine('service');$('addPrd').onclick=()=>addLine('product');
+    $('lines').oninput=$('lines').onchange=e=>{const i=e.target.dataset.i,f=e.target.dataset.f;if(i===undefined||!f)return;const l=lines[i];
+      if(f==='useMem'){l.useMem=e.target.checked;return renderLines()}
+      if(f==='name'){l.name=e.target.value;const src=(l.type==='service'?services:products).find(x=>x.name===l.name);l.price=src.price;return renderLines()}
+      l[f]=Math.max(f==='qty'?1:0,+e.target.value||0);calc()};
+    $('lines').onclick=e=>{const b=e.target.closest('[data-rm]');if(b){lines.splice(+b.dataset.rm,1);renderLines()}};
+    $('cust').oninput=()=>{const m=memOf(val('cust'));lines.forEach(l=>{if(!m)l.useMem=false});
+      $('memInfo').textContent=m?`${m.plan} membership active · ${m.left} of ${m.total} sessions left`:'';$('memInfo').classList.toggle('hidden',!m);renderLines()};
+    ['dval','dtype','gst','sCash','sUpi'].forEach(id=>$(id).oninput=$(id).onchange=calc);
+    $('paid').oninput=()=>{paidTouched=true;calc()};
+    $('mode').onchange=()=>{if($('mode').value==='Split'){const t=totals().total;$('sCash').value=Math.floor(t/2);$('sUpi').value=t-Math.floor(t/2)}calc()};
+    $('applyCp').onclick=()=>{const c=val('coupon').toUpperCase(),d=COUPONS[c],m=$('cpMsg');
+      if(!d){coupon=null;m.textContent='That coupon code is not valid.';m.className='text-xs mt-1 text-rose-600'}
+      else{coupon={code:c,...d};m.textContent=`${c} applied: ${d.type==='%'?d.v+'% off':fmtINR(d.v)+' off'}.`;m.className='text-xs mt-1 text-emerald-700'}calc()};
+
+    // ---------- Save / print / WhatsApp ----------
+    function save(){
+      const t=calc(); let ok=bad('eCust',customers.some(c=>c.name===val('cust'))?'':'Pick a customer from the list.');
+      ok=bad('eLines',lines.length&&lines.every(l=>l.qty>=1)?'':'Add at least one item.')&&ok; ok=bad('ePaid',t.paid<=t.total?'':'Amount paid cannot be more than the grand total.')&&ok; if(!ok)return null;
+      const n=Math.max(...invoices.map(i=>+i.id.split('-')[1]))+1, memLines=lines.filter(l=>l.useMem).length, m=memOf(val('cust'));
+      const inv={id:'INV-'+n,customer:val('cust'),date:val('idate')||TODAY,staff:val('staff'),items:lines.map(l=>({...l})),subtotal:t.sub,discount:Math.round(t.disc),amount:t.amount,gst:t.tax,gstPct:num('gst'),total:t.total,paid:t.paid,balance:t.bal,mode:val('mode'),status:t.st};
+      invoices.push(inv); if(t.paid)payments.push({date:inv.date,amount:t.paid});
+      if(m&&memLines)memUsed[m.id]=(memUsed[m.id]||0)+memLines;
+      lines.filter(l=>l.type==='product').forEach(l=>{const p=products.find(x=>x.name===l.name);if(p)p.stock=Math.max(0,p.stock-l.qty)});
+      lines=[];coupon=null;paidTouched=false;$('cust').value='';$('dval').value=0;$('coupon').value='';$('cpMsg').textContent='Try WELCOME10, SPA500 or FESTIVE15.';$('cpMsg').className='text-xs mt-1 text-slate-500';$('memInfo').classList.add('hidden');
+      renderLines();renderSummary();renderInvoices();renderDue();toast(`Invoice ${inv.id} saved`);return inv;
+    }
+    $('saveBtn').onclick=save;
+    $('printBtn').onclick=()=>{const i=save();if(i)showInvoice(i,true)};
+    $('waBtn').onclick=()=>{const i=save();if(!i)return;
+      window.open(`https://wa.me/91${mob(i.customer)}?text=${encodeURIComponent(`Hi ${i.customer.split(' ')[0]}, thank you for visiting Serenity Spa & Salon. Invoice ${i.id}: total ${fmtINR(i.total)}, paid ${fmtINR(i.paid)}, balance ${fmtINR(i.balance)}.`)}`,'_blank','noopener')};
+
+    // ---------- Printable invoice ----------
+    function showInvoice(i,print){
+      const c=customers.find(x=>x.name===i.customer)||{};
+      $('invBody').innerHTML=`<div class="flex justify-between items-start"><div><h2 class="text-xl font-bold text-teal-700">Serenity Spa & Salon</h2><p class="text-xs text-slate-500 mt-1">MG Road, Pune, Maharashtra · +91 98765 43210<br>GSTIN 27ABCDE1234F1Z5</p></div>
+        <div class="text-right"><p class="text-lg font-bold text-slate-800">TAX INVOICE</p><p class="text-sm text-slate-500">${i.id}<br>${fmtDate(i.date)}</p></div></div>
+        <div class="mt-5 text-sm"><p class="text-xs text-slate-400">Billed to</p><p class="font-semibold text-slate-800">${esc(i.customer)}</p><p class="text-slate-500">${esc(c.mobile||'')} ${c.email?'· '+esc(c.email):''}</p><p class="text-slate-500">Served by ${esc(i.staff||'—')}</p></div>
+        <table class="w-full text-sm mt-5"><thead class="border-y border-slate-200 text-left text-slate-500"><tr><th class="py-2 font-medium">Item</th><th class="font-medium text-right">Qty</th><th class="font-medium text-right">Rate</th><th class="font-medium text-right">Amount</th></tr></thead><tbody class="divide-y divide-slate-100">
+        ${i.items.map(l=>`<tr><td class="py-2">${esc(l.name)}${l.useMem?' <span class="text-xs text-teal-700">(membership)</span>':''}</td><td class="text-right">${l.qty}</td><td class="text-right">${fmtINR(l.price)}</td><td class="text-right">${l.useMem?fmtINR(0):fmtINR(l.qty*l.price)}</td></tr>`).join('')}</tbody></table>
+        <dl class="ml-auto mt-4 w-64 text-sm space-y-1">${[['Subtotal',fmtINR(i.subtotal??i.items.reduce((a,l)=>a+(l.useMem?0:l.qty*l.price),0))],['Discount','− '+fmtINR(i.discount||0)],[`GST (${i.gstPct}%)`,fmtINR(i.gst)]].map(([a,b])=>`<div class="flex justify-between"><dt class="text-slate-500">${a}</dt><dd>${b}</dd></div>`).join('')}
+        <div class="flex justify-between font-bold text-base border-t border-slate-200 pt-2"><dt>Total</dt><dd>${fmtINR(i.total)}</dd></div><div class="flex justify-between"><dt class="text-slate-500">Paid (${i.mode})</dt><dd>${fmtINR(i.paid)}</dd></div><div class="flex justify-between font-semibold"><dt>Balance due</dt><dd>${fmtINR(i.balance)}</dd></div></dl>
+        <p class="mt-5 text-xs"><span class="badge ${STAT[i.status]}">${i.status}</span></p><p class="mt-6 text-center text-xs text-slate-400">Thank you for choosing Serenity. We look forward to seeing you again.</p>`;
+      $('inv').classList.remove('hidden'); if(print)setTimeout(()=>window.print(),200);
+    }
+    $('invClose').onclick=()=>$('inv').classList.add('hidden');$('invPrint').onclick=()=>window.print();
+
+    // ---------- All invoices ----------
+    const ico=(p,l,a)=>`<button ${a} title="${l}" aria-label="${l}" class="p-1.5 rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-teal-700"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg></button>`;
+    function renderInvoices(){
+      const f=val('fFrom'),t=val('fTo'),s=val('fStat'),m=val('fMode');
+      const rows=invoices.filter(i=>(!f||i.date>=f)&&(!t||i.date<=t)&&(!s||i.status===s)&&(!m||i.mode===m)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+      $('invRows').innerHTML=rows.map(i=>`<tr data-id="${i.id}"><td class="font-medium text-slate-800">${i.id}</td><td>${fmtDate(i.date)}</td><td>${esc(i.customer)}</td><td class="ta-r">${fmtINR(i.total)}</td><td class="ta-r">${fmtINR(i.paid)}</td><td class="ta-r ${i.balance?'text-rose-600 font-semibold':''}">${fmtINR(i.balance)}</td><td>${i.mode}</td><td><span class="badge ${STAT[i.status]}">${i.status}</span></td>
+        <td class="ta-r">${ico('M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 100-6 3 3 0 000 6z','View invoice','data-view')}${ico('M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z','Print invoice','data-print')}</td></tr>`).join('')
+        ||'<tr><td colspan="9" class="!py-8 text-center text-slate-500">No invoices match these filters.</td></tr>';
+    }
+    ['fFrom','fTo','fStat','fMode'].forEach(id=>$(id).onchange=renderInvoices);
+    $('fClear').onclick=()=>{['fFrom','fTo','fStat','fMode'].forEach(id=>$(id).value='');renderInvoices()};
+    $('invRows').onclick=e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;const i=invoices.find(x=>x.id===tr.dataset.id);
+      if(e.target.closest('[data-view]'))showInvoice(i);else if(e.target.closest('[data-print]'))showInvoice(i,true)};
+
+    // ---------- Outstanding ----------
+    const dueList=()=>{const g={};invoices.filter(i=>i.balance>0).forEach(i=>{(g[i.customer]??={customer:i.customer,list:[],due:0}).list.push(i);g[i.customer].due+=i.balance});
+      return Object.values(g).map(x=>({...x,oldest:x.list.reduce((a,i)=>i.date<a?i.date:a,'9999'),days:0})).map(x=>({...x,days:Math.max(0,Math.floor((new Date(TODAY)-new Date(x.oldest))/864e5))})).sort((a,b)=>b.days-a.days)};
+    function renderDue(){
+      $('dueRows').innerHTML=dueList().map(d=>`<tr data-c="${esc(d.customer)}"><td><p class="font-medium text-slate-800">${esc(d.customer)}</p><p class="text-xs text-slate-500">${esc(mob(d.customer)||'')}</p></td><td>${d.list.map(i=>i.id).join(', ')}</td><td class="ta-r font-semibold text-rose-600">${fmtINR(d.due)}</td>
+        <td><span class="badge ${d.days>14?'badge-lost':d.days>0?'badge-vip':'badge-inactive'}">${d.days?d.days+' days':'Not overdue'}</span></td>
+        <td class="ta-r"><button data-rem class="btn-ghost">Send reminder</button> <button data-col class="btn-primary text-xs !py-1.5 !px-3">Collect payment</button></td></tr>`).join('')
+        ||'<tr><td colspan="5" class="!py-8 text-center text-slate-500">No outstanding payments. Every invoice is settled.</td></tr>';
+    }
+    $('dueRows').onclick=e=>{const tr=e.target.closest('tr[data-c]');if(!tr)return;const d=dueList().find(x=>x.customer===tr.dataset.c);if(!d)return;
+      const fi='class="fi"';
+      if(e.target.closest('[data-rem]'))modal('Send reminder to '+d.customer,`<div><label class="font-medium text-slate-700" for="r_ch">Send via</label><select id="r_ch" ${fi}><option>WhatsApp</option><option>SMS</option></select></div><div><label class="font-medium text-slate-700" for="r_msg">Message</label><textarea id="r_msg" rows="4" ${fi}>Hi ${esc(d.customer.split(' ')[0])}, a gentle reminder that ${fmtINR(d.due)} is pending at Serenity Spa & Salon. Please pay at your convenience. Thank you!</textarea></div>`,'Send reminder',()=>{toast(`Reminder sent to ${d.customer} via ${$('r_ch').value}`)});
+      if(e.target.closest('[data-col]'))modal('Collect payment from '+d.customer,`<p class="text-slate-600">Total due: <b>${fmtINR(d.due)}</b></p><div><label class="font-medium text-slate-700" for="c_amt">Amount (₹)</label><input id="c_amt" type="number" min="1" value="${d.due}" ${fi}><p id="c_err" class="text-xs text-rose-600 mt-1 hidden"></p></div><div><label class="font-medium text-slate-700" for="c_mode">Payment mode</label><select id="c_mode" ${fi}><option>Cash</option><option>UPI</option><option>Card</option><option>Wallet</option></select></div>`,'Collect payment',()=>{
+        let amt=+$('c_amt').value; if(!(amt>0&&amt<=d.due))return bad('c_err','Enter an amount between ₹1 and '+fmtINR(d.due)+'.')&&false;
+        const total=amt; d.list.sort((a,b)=>a.date.localeCompare(b.date)).forEach(i=>{const p=Math.min(i.balance,amt);i.paid+=p;i.balance-=p;amt-=p;i.status=i.balance<=0?'Paid':'Partial'});
+        payments.push({date:TODAY,amount:total});renderAll();toast(`${fmtINR(total)} collected from ${d.customer}`)});
+    };
+
+    // ---------- Tabs ----------
+    function renderAll(){renderSummary();renderInvoices();renderDue()}
+    function setTab(t){tab=t;document.querySelectorAll('#tabs button').forEach(b=>b.className='px-4 py-1 rounded-lg whitespace-nowrap transition '+(b.dataset.t===t?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100'));
+      $('pNew').classList.toggle('hidden',t!=='new');$('pAll').classList.toggle('hidden',t!=='all');$('pDue').classList.toggle('hidden',t!=='due')}
+    $('tabs').onclick=e=>{const b=e.target.closest('button');if(b)setTab(b.dataset.t)};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeOv();$('inv').classList.add('hidden')}});
+
+    // Prefill from appointments.html?appointment=ID ("Create invoice")
+    const ap=appointments.find(a=>a.id===+new URLSearchParams(location.search).get('appointment'));
+    if(ap){$('cust').value=ap.customer;$('staff').value=ap.staff;const s=services.find(x=>x.name===ap.service);if(s)lines.push({type:'service',name:s.name,qty:1,price:s.price,useMem:false});$('cust').oninput()}
+    setTab('new');renderLines();renderAll();
+  })();
+  </script>
+</body>
+</html>
