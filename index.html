@@ -14,9 +14,11 @@
 
     <!-- LEFT: brand panel (hidden on mobile) -->
     <section class="hero-panel relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden">
-      <div class="relative z-10 flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-white/20 grid place-items-center font-bold">K</div>
-        <span class="font-semibold">Kunash</span>
+      <div class="relative z-10">
+        <!-- White card keeps the logo readable on the teal background -->
+        <div class="inline-flex items-center bg-white rounded-xl px-4 py-2 shadow-sm">
+          <img src="assets/img/logo.png" alt="Kunash Media" class="h-10 w-auto max-w-[180px] object-contain">
+        </div>
       </div>
       <div class="relative z-10 max-w-md">
         <h1 class="text-4xl font-bold leading-tight">Kunash Spa &amp; Salon CRM</h1>
@@ -34,9 +36,8 @@
     <section class="flex flex-col items-center justify-center p-4 sm:p-8 min-h-screen lg:min-h-0">
       <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sm:p-8">
         <!-- Brand shown on mobile only -->
-        <div class="lg:hidden flex items-center gap-2 mb-6">
-          <div class="w-9 h-9 rounded-xl bg-teal-600 text-white grid place-items-center font-bold">K</div>
-          <span class="font-semibold text-slate-800">Kunash Spa &amp; Salon CRM</span>
+        <div class="lg:hidden flex items-center mb-6">
+          <img src="assets/img/logo.png" alt="Kunash Media" class="h-10 w-auto max-w-[180px] object-contain">
         </div>
         <h2 class="text-2xl font-bold text-slate-800">Welcome back</h2>
         <p class="text-sm text-slate-500 mt-1">Sign in to manage today's appointments.</p>
@@ -62,12 +63,6 @@
               <button type="button" id="togglePw" aria-label="Show password" aria-pressed="false" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-teal-700 hover:text-teal-800">Show</button>
             </div>
             <p id="passwordError" class="field-error" role="alert"></p>
-          </div>
-          <div>
-            <label for="role" class="block text-sm font-medium text-slate-700 mb-1">Role</label>
-            <select id="role" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20">
-              <option>Admin</option><option>Manager</option><option>Receptionist</option><option>Therapist</option>
-            </select>
           </div>
           <div class="flex items-center justify-between text-sm">
             <label class="flex items-center gap-2 text-slate-600"><input id="remember" type="checkbox" class="rounded border-slate-300 text-teal-600 focus:ring-teal-600">Remember me</label>

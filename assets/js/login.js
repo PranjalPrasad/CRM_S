@@ -39,7 +39,9 @@
 
     // Build a display name from the email (demo only)
     const name=ev.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-    localStorage.setItem('crmUser',JSON.stringify({name,email:ev,role:$('role').value}));
+    // Role field removed from the form: everyone logs in as Admin for now.
+    // (layout.js reads user.role for sidebar permissions and the top bar label.)
+    localStorage.setItem('crmUser',JSON.stringify({name,email:ev,role:'Admin'}));
     if($('remember').checked) localStorage.setItem('crmRememberEmail',ev); else localStorage.removeItem('crmRememberEmail');
     location.href='dashboard.html';
   });
