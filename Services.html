@@ -22,15 +22,28 @@
         <div id="tabs" class="inline-flex p-1 bg-white border border-slate-200 rounded-xl text-sm shadow-sm">
           <button data-t="services" class="px-4 py-1 rounded-lg">Services</button><button data-t="packages" class="px-4 py-1 rounded-lg">Packages</button>
         </div>
-        <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+        <div class="flex items-center gap-2.5">
+          <button id="histBtn" class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition">Service history</button>
+          <button id="addBtn" class="btn-primary text-sm !py-2"></button>
+        </div>
       </div>
 
       <!-- Services tab -->
       <section id="pSvc" class="space-y-3">
-        <div id="chips" class="flex flex-wrap gap-1.5"></div>
-        <div class="card overflow-hidden"><div class="overflow-x-auto">
-          <table class="data-table"><thead><tr><th>Service</th><th>Category</th><th>Duration</th><th class="ta-r">Price</th><th>Status</th><th class="ta-r">Actions</th></tr></thead>
-          <tbody id="svcRows"></tbody></table></div></div>
+        <!-- Filters -->
+        <div class="card p-3 flex flex-wrap items-center gap-2.5 text-sm">
+          <select id="fCat" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white" aria-label="Filter by category"><option value="">All categories</option></select>
+          <select id="fSt" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white" aria-label="Filter by status"><option value="">All statuses</option><option>Active</option><option>Inactive</option></select>
+          <button id="fReset" class="px-3 h-8 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition">Reset</button>
+          <span id="svcCount" class="ml-auto text-slate-500"></span>
+        </div>
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="data-table"><thead><tr><th>Service</th><th>Category</th><th>Duration</th><th class="ta-r">Price</th><th>Status</th><th class="ta-r">Actions</th></tr></thead>
+            <tbody id="svcRows"></tbody></table>
+          </div>
+          <div id="svcPager"></div>
+        </div>
       </section>
 
       <!-- Packages tab -->
@@ -61,12 +74,25 @@
   (function(){
     if(!localStorage.getItem('crmUser'))return;
     const $=id=>document.getElementById(id);
-    let tab='services', cat='All', tt;
+    let tab='services', tt;
+    let page=1, perPage=10;                                   // services table pagination
     const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
     const nextId=a=>Math.max(0,...a.map(x=>x.id))+1;
     const svcPrice=n=>(services.find(s=>s.name===n)||{price:0}).price;
     const TODAY=addDaysISO(new Date().toISOString().slice(0,10),0), MONTH=new Date().toISOString().slice(0,7);
     $('custList').innerHTML=customers.map(c=>`<option value="${esc(c.name)}">`).join('');
+
+    // ---------- Service history (audit log) ----------
+    // Kept in memory like the rest of the page data. Entries survive edits and deletes of a service.
+    const serviceHistory=[];
+    const HB={Created:'badge-active',Updated:'badge-new',Activated:'badge-active',Deactivated:'badge-inactive',Deleted:'badge-lost'};
+    const who=()=>{const u=localStorage.getItem('crmUser');if(!u)return 'Staff';try{const j=JSON.parse(u);return typeof j==='string'?j:(j&&(j.name||j.email||j.username))||'Staff'}catch{return u}};
+    const logSvc=(s,action,changes=[])=>serviceHistory.push({id:serviceHistory.length+1,ts:Date.now(),serviceId:s.id,service:s.name,action,changes,by:who()});
+    const FIELDS=[['name','Name'],['category','Category'],['duration','Duration',v=>v+' min'],['price','Price',v=>fmtINR(v)],['description','Description'],['consumption','Consumption notes']];
+    const show=(k,f,o)=>f?String(f(o[k])):(o[k]?String(o[k]):'—');
+    const diff=(o,n)=>FIELDS.filter(([k])=>(o[k]||'')!==(n[k]||'')).map(([k,l,f])=>({field:l,from:show(k,f,o),to:show(k,f,n)}));
+    const snapshot=s=>[{field:'Category',from:null,to:String(s.category)},{field:'Duration',from:null,to:s.duration+' min'},{field:'Price',from:null,to:String(fmtINR(s.price))}];
+    const fmtTs=t=>new Date(t).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
 
     // ---------- Overlay + form helpers ----------
     const inp='w-full mt-1 px-3 py-1.5 rounded-lg border border-slate-300 focus:border-teal-600 focus:outline-none bg-white';
@@ -77,17 +103,32 @@
     const val=id=>$(id).value.trim();
     const bad=(id,m)=>{const e=$('e_'+id);e.textContent=m||'';e.classList.toggle('hidden',!m);return !m};
     let ovSubmit=null;
+    // submit:null -> info-only overlay (no confirm button, "Close" instead of "Cancel")
     function modal({title,html,submit='Save',danger=false,wide=true,onSubmit}){
       $('ovTitle').textContent=title;$('ovBody').innerHTML=html;$('ovForm').style.maxWidth=wide?'38rem':'26rem';ovSubmit=onSubmit;
-      $('ovSubmit').textContent=submit;$('ovSubmit').className=(danger?'bg-rose-600 hover:bg-rose-700 text-white rounded-[.625rem] px-4 py-2 font-semibold':'btn-primary')+' text-sm';
+      $('ovSubmit').textContent=submit||'';$('ovSubmit').className=(danger?'bg-rose-600 hover:bg-rose-700 text-white rounded-[.625rem] px-4 py-2 font-semibold':'btn-primary')+' text-sm';
+      $('ovSubmit').classList.toggle('hidden',!submit);$('ovCancel').textContent=submit?'Cancel':'Close';
       $('ov').classList.remove('hidden');
     }
     const closeOv=()=>$('ov').classList.add('hidden');
     $('ovX').onclick=$('ovCancel').onclick=closeOv;
     $('ovForm').onsubmit=e=>{e.preventDefault();if(ovSubmit&&ovSubmit()!==false)closeOv()};
     document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOv()});
-    const icon=(p,label,hover,attrs)=>`<button ${attrs} title="${label}" aria-label="${label}" class="p-1.5 rounded-lg text-slate-500 transition ${hover}"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg></button>`;
-    const EDIT='M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z', DEL='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6';
+    const icon=(p,label,hover,attrs)=>`<button ${attrs} type="button" title="${label}" aria-label="${label}" class="p-1.5 rounded-lg text-slate-500 transition ${hover}"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="${p}"/></svg></button>`;
+    const EDIT='M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z', DEL='M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6', HIST='M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z';
+
+    // ---------- Pagination helper ----------
+    const pageNums=(p,n)=>{ // e.g. 1 … 4 5 6 … 12
+      const s=new Set([1,n,p-1,p,p+1].filter(x=>x>=1&&x<=n)), out=[]; let last=0;
+      [...s].sort((a,b)=>a-b).forEach(x=>{ if(x-last>1)out.push('…'); out.push(x); last=x });
+      return out;
+    };
+
+    // ---------- Filters ----------
+    $('fCat').insertAdjacentHTML('beforeend',SERVICE_CATS.map(c=>`<option>${c}</option>`).join(''));
+    const filtered=()=>services.filter(s=>(!$('fCat').value||s.category===$('fCat').value)&&(!$('fSt').value||(s.active?'Active':'Inactive')===$('fSt').value));
+    ['fCat','fSt'].forEach(i=>$(i).onchange=()=>{page=1;render()});
+    $('fReset').onclick=()=>{$('fCat').value='';$('fSt').value='';page=1;render()};
 
     // ---------- Render ----------
     function render(){
@@ -97,15 +138,37 @@
         card('Packages sold this month',sold.length,'since 1st of the month')+card('Package revenue',fmtINR(sold.reduce((a,s)=>a+s.price,0)),'this month');
       document.querySelectorAll('#tabs button').forEach(b=>b.className='px-4 py-1 rounded-lg transition '+(b.dataset.t===tab?'bg-teal-600 text-white font-semibold shadow-sm':'text-slate-600 hover:bg-slate-100'));
       $('pSvc').classList.toggle('hidden',tab!=='services');$('pPkg').classList.toggle('hidden',tab!=='packages');
+      $('histBtn').classList.toggle('hidden',tab!=='services');
       $('addBtn').textContent=tab==='services'?'+ Add service':'+ Add package';
-      // Services
-      $('chips').innerHTML=['All',...SERVICE_CATS].map(c=>`<button data-c="${c}" class="px-3 py-0.5 rounded-full text-xs font-medium border transition ${c===cat?'bg-teal-600 border-teal-600 text-white':'border-slate-300 text-slate-600 hover:bg-slate-50'}">${c} (${c==='All'?services.length:services.filter(s=>s.category===c).length})</button>`).join('');
-      const rows=services.filter(s=>cat==='All'||s.category===cat);
-      $('svcRows').innerHTML=rows.map(s=>`<tr data-id="${s.id}"><td><p class="font-medium text-slate-800">${esc(s.name)}</p><p class="text-xs text-slate-500 truncate max-w-xs">${esc(s.description)}</p></td>
+
+      // Services: filter -> paginate
+      const rows=filtered(), isFiltered=!!($('fCat').value||$('fSt').value);
+      const pages=Math.max(1,Math.ceil(rows.length/perPage));
+      page=Math.min(Math.max(1,page),pages);                  // clamp after filters / deletes
+      const from=(page-1)*perPage, shown=rows.slice(from,from+perPage);
+      $('svcCount').textContent=isFiltered?`${rows.length} of ${services.length} services`:`${services.length} services`;
+      $('fReset').disabled=!isFiltered; $('fReset').classList.toggle('opacity-40',!isFiltered); $('fReset').classList.toggle('pointer-events-none',!isFiltered);
+      $('svcRows').innerHTML=shown.map(s=>`<tr data-id="${s.id}"><td><p class="font-medium text-slate-800">${esc(s.name)}</p><p class="text-xs text-slate-500 truncate max-w-xs">${esc(s.description)}</p></td>
         <td><span class="badge badge-inactive">${s.category}</span></td><td>${s.duration} min</td><td class="ta-r font-semibold text-slate-800">${fmtINR(s.price)}</td>
-        <td><button data-tog title="${s.active?'Active':'Inactive'}" role="switch" aria-checked="${s.active}" aria-label="Toggle ${esc(s.name)}" class="relative block w-9 h-5 rounded-full transition ${s.active?'bg-teal-600':'bg-slate-300'}"><span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${s.active?'left-[18px]':'left-0.5'}"></span></button></td>
-        <td class="ta-r">${icon(EDIT,'Edit service','hover:bg-slate-100 hover:text-slate-800','data-edit')}${icon(DEL,'Delete service','hover:bg-rose-50 hover:text-rose-600','data-del')}</td></tr>`).join('')
-        ||'<tr><td colspan="6" class="!py-8 text-center text-slate-500">No services in this category yet. Use "Add service" to create one.</td></tr>';
+        <td><button data-tog type="button" title="${s.active?'Active':'Inactive'}" role="switch" aria-checked="${s.active}" aria-label="Toggle ${esc(s.name)}" class="relative block w-9 h-5 rounded-full transition ${s.active?'bg-teal-600':'bg-slate-300'}"><span class="absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${s.active?'left-[18px]':'left-0.5'}"></span></button></td>
+        <td class="ta-r whitespace-nowrap">${icon(HIST,'View history','hover:bg-slate-100 hover:text-slate-800','data-hist')}${icon(EDIT,'Edit service','hover:bg-slate-100 hover:text-slate-800','data-edit')}${icon(DEL,'Delete service','hover:bg-rose-50 hover:text-rose-600','data-del')}</td></tr>`).join('')
+        ||`<tr><td colspan="6" class="!py-8 text-center text-slate-500">${isFiltered?'No services match these filters. Use Reset to see all services.':'No services yet. Use "Add service" to create one.'}</td></tr>`;
+      const pb='min-w-8 h-8 px-2 rounded-lg border text-sm transition ';
+      $('svcPager').innerHTML=rows.length?`<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 text-sm text-slate-600">
+          <div class="flex items-center gap-2">
+            <span>Showing ${from+1}–${from+shown.length} of ${rows.length}</span>
+            <select id="svcPer" class="ml-2 px-2 py-1 rounded-lg border border-slate-300 bg-white" aria-label="Rows per page">
+              ${[10,25,50].map(n=>`<option value="${n}" ${n===perPage?'selected':''}>${n} / page</option>`).join('')}
+            </select>
+          </div>
+          <div class="flex items-center gap-1">
+            <button type="button" data-pg="${page-1}" ${page===1?'disabled':''} class="${pb}border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none" aria-label="Previous page">&lsaquo;</button>
+            ${pageNums(page,pages).map(p=>p==='…'
+              ?'<span class="px-1 text-slate-400">…</span>'
+              :`<button type="button" data-pg="${p}" class="${pb}${p===page?'bg-teal-600 border-teal-600 text-white font-semibold':'border-slate-300 hover:bg-slate-50'}" ${p===page?'aria-current="page"':''}>${p}</button>`).join('')}
+            <button type="button" data-pg="${page+1}" ${page===pages?'disabled':''} class="${pb}border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none" aria-label="Next page">&rsaquo;</button>
+          </div></div>`:'';
+
       // Packages
       $('pkgGrid').innerHTML=packages.map(p=>{const list=p.items.reduce((a,i)=>a+i.qty*svcPrice(i.service),0);return `<div class="card card-hover p-4 flex flex-col" data-id="${p.id}">
         <div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="font-semibold text-slate-800 truncate">${esc(p.name)}</h3><span class="badge ${p.status==='Active'?'badge-active':'badge-inactive'} mt-1">${p.status}</span></div>
@@ -118,8 +181,28 @@
         ||'<tr><td colspan="5" class="!py-8 text-center text-slate-500">No package sales yet.</td></tr>';
     }
     $('tabs').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.t;render()}};
-    $('chips').onclick=e=>{const b=e.target.closest('[data-c]');if(b){cat=b.dataset.c;render()}};
     $('addBtn').onclick=()=>tab==='services'?svcForm():pkgForm();
+    $('histBtn').onclick=()=>historyModal();
+    $('svcPager').onclick=e=>{const b=e.target.closest('[data-pg]');if(b&&!b.disabled){page=+b.dataset.pg;render()}};
+    $('svcPager').onchange=e=>{if(e.target.id==='svcPer'){perPage=+e.target.value;page=1;render()}};
+
+    // ---------- History overlay (all services, or one service) ----------
+    function historyModal(sid){
+      const one=sid?services.find(x=>x.id===sid):null;
+      const entry=h=>`<li class="py-3"><div class="flex items-center justify-between gap-2"><div class="min-w-0 truncate"><span class="badge ${HB[h.action]}">${h.action}</span><span class="ml-2 font-medium text-slate-800">${esc(h.service)}</span></div><span class="text-xs text-slate-400 shrink-0">${fmtTs(h.ts)}</span></div>
+        ${h.changes.length?`<ul class="mt-1.5 space-y-0.5 text-xs text-slate-600">${h.changes.map(c=>`<li><span class="text-slate-500">${esc(c.field)}:</span> ${c.from!=null?`<span class="line-through text-slate-400">${esc(c.from)}</span> → `:''}<span class="font-medium">${esc(c.to)}</span></li>`).join('')}</ul>`:''}
+        <p class="text-xs text-slate-400 mt-1">by ${esc(h.by)}</p></li>`;
+      const draw=()=>{
+        const a=$('h_act').value;
+        const rows=serviceHistory.filter(h=>(!sid||h.serviceId===sid)&&(!a||h.action===a)).reverse();
+        $('h_list').innerHTML=rows.length?rows.map(entry).join(''):`<li class="py-8 text-center text-slate-500">${serviceHistory.length&&(a||sid)?'No history matches this view.':'No changes recorded yet. Adding, editing, activating or deleting a service will show up here.'}</li>`;
+      };
+      modal({title:one?`History · ${one.name}`:'Service history',submit:null,html:`<div class="flex items-center justify-between gap-3 mb-2">
+          <select id="h_act" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white" aria-label="Filter by action"><option value="">All actions</option>${Object.keys(HB).map(k=>`<option>${k}</option>`).join('')}</select>
+          <span class="text-xs text-slate-400">Newest first</span></div>
+        <ul id="h_list" class="max-h-96 overflow-y-auto divide-y divide-slate-100"></ul>`});
+      $('h_act').onchange=draw; draw();
+    }
 
     // ---------- Services CRUD ----------
     function svcForm(s){
@@ -132,18 +215,27 @@
           ok=bad('f_dur',+val('f_dur')>0?'':'Enter the duration in minutes.')&&ok;
           ok=bad('f_price',val('f_price')!==''&&+val('f_price')>=0?'':'Enter the price.')&&ok; if(!ok)return false;
           const d={name:val('f_name'),category:val('f_cat'),duration:+val('f_dur'),price:+val('f_price'),description:val('f_desc'),consumption:val('f_use')};
-          if(s){Object.assign(s,d);toast('Service updated')}else{services.push({id:nextId(services),active:true,...d});toast('Service added')} render();
+          if(s){
+            const changes=diff(s,d); Object.assign(s,d);
+            if(changes.length){logSvc(s,'Updated',changes);toast('Service updated')}else toast('No changes to save');
+          }else{
+            const n={id:nextId(services),active:true,...d}; services.push(n); logSvc(n,'Created',snapshot(n)); toast('Service added');
+          }
+          render();
         }});
       if(s){$('f_name').value=s.name;$('f_cat').value=s.category;$('f_dur').value=s.duration;$('f_price').value=s.price;$('f_desc').value=s.description||'';$('f_use').value=s.consumption||''}
     }
     $('svcRows').onclick=e=>{
       const tr=e.target.closest('tr[data-id]');if(!tr)return;const s=services.find(x=>x.id===+tr.dataset.id);
-      if(e.target.closest('[data-tog]')){s.active=!s.active;render();toast(`${s.name} is now ${s.active?'active':'inactive'}`)}
+      if(e.target.closest('[data-tog]')){s.active=!s.active;logSvc(s,s.active?'Activated':'Deactivated');render();toast(`${s.name} is now ${s.active?'active':'inactive'}`)}
+      else if(e.target.closest('[data-hist]'))historyModal(s.id);
       else if(e.target.closest('[data-edit]'))svcForm(s);
       else if(e.target.closest('[data-del]')){
         const used=packages.find(p=>p.items.some(i=>i.service===s.name));
-        if(used)return toast(`Can't delete: ${s.name} is part of "${used.name}". Remove it from the package first.`);
-        modal({title:'Delete service',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete ${esc(s.name)}? This can't be undone in this session.</p>`,onSubmit(){services.splice(services.indexOf(s),1);render();toast('Service deleted')}});
+        if(used)return modal({title:"Can't delete service",submit:null,wide:false,html:`<p class="text-slate-600"><b>${esc(s.name)}</b> is part of the "${esc(used.name)}" package. Remove it from the package first, then delete the service.</p>`});
+        modal({title:'Delete service',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete <b>${esc(s.name)}</b>? This can't be undone in this session. Its history will be kept.</p>`,onSubmit(){
+          logSvc(s,'Deleted',snapshot(s)); services.splice(services.indexOf(s),1); render(); toast('Service deleted');
+        }});
       }
     };
 
@@ -170,7 +262,7 @@
     $('pkgGrid').onclick=e=>{
       const card=e.target.closest('[data-id]');if(!card)return;const p=packages.find(x=>x.id===+card.dataset.id);
       if(e.target.closest('[data-edit]'))pkgForm(p);
-      else if(e.target.closest('[data-del]'))modal({title:'Delete package',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete the ${esc(p.name)} package? Past sales stay in the list.</p>`,onSubmit(){packages.splice(packages.indexOf(p),1);render();toast('Package deleted')}});
+      else if(e.target.closest('[data-del]'))modal({title:'Delete package',submit:'Delete',danger:true,wide:false,html:`<p class="text-slate-600">Delete the <b>${esc(p.name)}</b> package? Past sales stay in the list.</p>`,onSubmit(){packages.splice(packages.indexOf(p),1);render();toast('Package deleted')}});
       else if(e.target.closest('[data-sell]'))sellForm(p);
     };
 

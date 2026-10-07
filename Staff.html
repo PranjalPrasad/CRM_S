@@ -27,34 +27,30 @@
     #modalOv.open{display:block}
     #modalOv{backdrop-filter:blur(2px)}
     #form{animation:pop .18s ease-out}
+    #detBox{animation:pop .18s ease-out}
+    #detOv{backdrop-filter:blur(2px)}
     @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
 
-    /* Pagination */
-    .pg-btn{min-width:2.25rem;height:2.25rem;padding:0 .6rem;border:1px solid #cbd5e1;border-radius:.5rem;background:#fff;color:#475569;font-size:.8125rem;font-weight:500;transition:background .15s,border-color .15s}
-    .pg-btn:hover:not(:disabled):not(.active){background:#f1f5f9}
-    .pg-btn.active{background:#0d9488;border-color:#0d9488;color:#fff}
-    .pg-btn:disabled{opacity:.4;cursor:not-allowed}
+    /* Performance table: every column name and value stays on one line and fully readable */
+    .perf-table{border-collapse:separate;border-spacing:0}
+    .perf-table th,.perf-table td{white-space:nowrap}
+    .perf-table thead th{background:#f1f5f9;color:#334155;font-size:.8125rem;font-weight:600;letter-spacing:.02em;border-bottom:2px solid #cbd5e1}
+    .perf-table tbody td{color:#1e293b;font-size:.875rem}
+    .perf-table tbody tr:nth-child(even){background:#f8fafc}
+    .perf-table tfoot td{background:#f1f5f9;color:#0f172a;font-size:.875rem;border-top:2px solid #cbd5e1}
 
-    /* Sidebar collapse / expand (desktop) */
-    .app-wrap{transition:padding-left .25s ease}
-    #sbToggle{display:none}
-    @media (min-width:1024px){
-      #sbToggle{display:grid;position:fixed;top:18px;left:242px;z-index:40;width:28px;height:28px;place-items:center;border-radius:9999px;background:#fff;border:1px solid #cbd5e1;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.12);transition:left .25s ease,background .15s}
-      #sbToggle:hover{background:#f1f5f9}
-      #sbToggle svg{transition:transform .25s ease}
-      body.sb-collapsed #sbToggle{left:10px}
-      body.sb-collapsed #sbToggle svg{transform:rotate(180deg)}
-    }
+    /* Pagination */
+    .pg-btn{min-width:2.25rem;height:2.25rem;padding:0 .65rem;border:1px solid #94a3b8;border-radius:.5rem;background:#fff;color:#334155;font-size:.875rem;font-weight:500;transition:background .15s,border-color .15s}
+    .pg-btn:hover:not(:disabled):not(.active){background:#f1f5f9}
+    .pg-btn.active{background:#0d9488;border-color:#0d9488;color:#fff;font-weight:600}
+    .pg-btn:disabled{opacity:.4;cursor:not-allowed}
   </style>
 </head>
 <body data-page="staff" data-title="Staff">
-  <button id="sbToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse / expand sidebar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  </button>
-
   <!-- Shared sidebar + top bar are injected by layout.js -->
   <div id="app-sidebar"></div>
-  <div class="app-wrap lg:pl-64 min-h-screen flex flex-col">
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
     <div id="app-topbar"></div>
 
     <main class="flex-1 p-4 lg:p-8 space-y-6">
@@ -100,17 +96,17 @@
 
         <div class="card overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full text-sm min-w-[760px]">
-              <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <table class="perf-table w-full text-sm min-w-[920px]">
+              <thead>
                 <tr id="perfHead"></tr>
               </thead>
               <tbody id="perfBody" class="divide-y divide-slate-100"></tbody>
-              <tfoot id="perfFoot" class="bg-slate-50 font-semibold text-slate-700"></tfoot>
+              <tfoot id="perfFoot" class="font-semibold"></tfoot>
             </table>
           </div>
-          <!-- Table pagination -->
-          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-100">
-            <label class="text-sm text-slate-500 flex items-center gap-2">Rows per page
+          <!-- Table pagination (always visible) -->
+          <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 bg-white">
+            <label class="text-sm text-slate-700 flex items-center gap-2">Rows per page
               <select id="pgSize" class="fld !mt-0 !w-auto !min-h-0 !py-1.5"><option>5</option><option>10</option><option>20</option></select>
             </label>
             <nav id="pager" class="flex flex-wrap items-center gap-3" aria-label="Table pagination"></nav>
@@ -120,10 +116,10 @@
     </main>
   </div>
 
-  <!-- ===== Detail drawer ===== -->
-  <div id="drvOv" class="fixed inset-0 z-50 hidden bg-slate-900/40"></div>
-  <aside id="drawer" role="dialog" aria-modal="true" aria-label="Staff details"
-         class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-slate-50 shadow-2xl translate-x-full transition-transform duration-200 overflow-y-auto"></aside>
+  <!-- ===== Staff details overlay ===== -->
+  <div id="detOv" class="fixed inset-0 z-50 hidden bg-slate-900/50 overflow-y-auto p-4">
+    <div id="detBox" role="dialog" aria-modal="true" aria-label="Staff details" class="bg-slate-50 rounded-2xl mx-auto my-6 shadow-xl w-full max-w-2xl"></div>
+  </div>
 
   <!-- ===== Add / Edit overlay form ===== -->
   <div id="modalOv" class="fixed inset-0 z-[60] hidden bg-slate-900/50 overflow-y-auto p-4">
@@ -201,29 +197,11 @@
     const DOT_CLS={Available:'bg-emerald-500','In Service':'bg-amber-500',Off:'bg-slate-400'};
     const svcNames=services.map(s=>s.name);
 
-    /* ---------- Sidebar collapse / expand ---------- */
-    const tgl=$('sbToggle'),DESK=matchMedia('(min-width:1024px)'),wrap=document.querySelector('.app-wrap');
-    let collapsed=false;try{collapsed=localStorage.getItem('sbCollapsed')==='1'}catch(e){}
-    // Find the real sidebar element that layout.js injected (fixed, full-height, left edge)
-    const findSidebar=()=>{
-      const host=$('app-sidebar');let el=host&&host.firstElementChild;
-      const ok=e=>{if(!e)return false;const cs=getComputedStyle(e),r=e.getBoundingClientRect();return cs.position==='fixed'&&r.height>=innerHeight*.7&&r.width>100&&r.width<420};
-      if(ok(el))return el;
-      return [...document.querySelectorAll('aside,nav,#app-sidebar,#app-sidebar *')].find(ok)||el||host};
-    let sbW=0;
-    const applySb=()=>{
-      const sb=findSidebar(),desk=DESK.matches,hide=desk&&collapsed;
-      if(sb&&!hide){const w=sb.offsetWidth;if(w>100)sbW=w}
-      if(sb){sb.style.transition='transform .25s ease';sb.style.transform=hide?'translateX(-100%)':''}
-      if(wrap)wrap.style.paddingLeft=hide?'3.5rem':'';          // slim rail so the toggle never overlaps the page
-      tgl.style.left=(hide?12:(sbW||256)-14)+'px';
-      document.body.classList.toggle('sb-collapsed',hide);
-      tgl.setAttribute('aria-expanded',String(!hide));tgl.setAttribute('aria-label',hide?'Expand sidebar':'Collapse sidebar')};
-    const setSb=c=>{collapsed=c;try{localStorage.setItem('sbCollapsed',c?'1':'0')}catch(e){}applySb();setTimeout(()=>window.dispatchEvent(new Event('resize')),290)};
-    tgl.onclick=()=>setSb(!collapsed);
-    DESK.addEventListener('change',applySb);
-    if($('app-sidebar'))new MutationObserver(applySb).observe($('app-sidebar'),{childList:true});
-    applySb();
+    /* Sidebar collapse/expand is handled by layout.js (hamburger in the top bar).
+       Only resize the charts when the layout width changes. */
+    let drvChart=null,perfChart=null;
+    new MutationObserver(()=>setTimeout(()=>{if(drvChart)drvChart.resize();if(perfChart)perfChart.resize()},280))
+      .observe(document.body,{attributes:true,attributeFilter:['class']});
 
     /* ---------- Staff dataset ---------- */
     const EXTRA=[
@@ -299,22 +277,22 @@
     }
     $('q').addEventListener('input',renderTeam);
     $('roleFilter').addEventListener('change',renderTeam);
-    const openFromCard=e=>{const c=e.target.closest('[data-id]');if(c)openDrawer(+c.dataset.id)};
+    const openFromCard=e=>{const c=e.target.closest('[data-id]');if(c)openDetails(+c.dataset.id)};
     $('grid').addEventListener('click',openFromCard);
     $('grid').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openFromCard(e)}});
 
     /* =========================================================
-       DETAIL DRAWER
+       STAFF DETAILS OVERLAY
        ========================================================= */
-    let drvId=null,drvChart=null,perfChart=null;
+    let drvId=null;
     const section=(title,body)=>`<section class="card p-4"><h4 class="text-sm font-semibold text-slate-800 mb-3">${title}</h4>${body}</section>`;
     const row=(l,v)=>`<div class="flex justify-between gap-3 py-2 text-sm"><dt class="text-slate-500">${l}</dt><dd class="text-slate-800 font-medium text-right break-words">${v}</dd></div>`;
 
-    function drawerHtml(s){
+    function detailsHtml(s){
       const sch=schedule(s);
       const STATE={Completed:'bg-emerald-100 text-emerald-700','In Progress':'bg-amber-100 text-amber-700',Upcoming:'bg-slate-100 text-slate-600'};
       return `
-      <div class="sticky top-0 z-10 bg-white border-b border-slate-200 p-4 flex items-center gap-3">
+      <div class="sticky top-0 z-10 bg-white rounded-t-2xl border-b border-slate-200 p-4 flex items-center gap-3">
         ${avatar(s,'w-12 h-12')}
         <div class="min-w-0 flex-1"><h3 class="font-semibold text-slate-800 truncate">${esc(s.name)}</h3><div class="flex flex-wrap gap-1.5 mt-1">${roleBadge(s.role)}${statusBadge(s.status)}</div></div>
         <button id="drvEdit" type="button" class="px-3 h-9 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50">Edit</button>
@@ -349,28 +327,27 @@
       </div>`;
     }
 
-    function openDrawer(id){
+    function openDetails(id){
       const s=list.find(x=>x.id===id);if(!s)return;
       drvId=id;
-      $('drawer').innerHTML=drawerHtml(s);
-      $('drvOv').classList.remove('hidden');
+      $('detBox').innerHTML=detailsHtml(s);
+      $('detOv').classList.remove('hidden');
       document.body.classList.add('overflow-hidden');
-      requestAnimationFrame(()=>$('drawer').classList.remove('translate-x-full'));
       if(drvChart)drvChart.destroy();
       drvChart=new Chart($('drvChart'),{type:'bar',
         data:{labels:revenueTrend.labels,datasets:[{data:monthly(s),backgroundColor:'#0d9488',borderRadius:6,maxBarThickness:36}]},
         options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmtINR(c.parsed.y)}}},
           scales:{y:{beginAtZero:true,ticks:{callback:k},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
-      $('drvClose').onclick=closeDrawer;
+      $('drvClose').onclick=closeDetails;
       $('drvEdit').onclick=()=>openModal(s);
       $('drvClose').focus();
     }
-    function closeDrawer(){
-      $('drawer').classList.add('translate-x-full');$('drvOv').classList.add('hidden');
+    function closeDetails(){
+      $('detOv').classList.add('hidden');
       document.body.classList.remove('overflow-hidden');drvId=null;
       if(drvChart){drvChart.destroy();drvChart=null}
     }
-    $('drvOv').addEventListener('click',closeDrawer);
+    $('detOv').addEventListener('mousedown',e=>{if(e.target===$('detOv'))closeDetails()});
 
     /* =========================================================
        ADD / EDIT OVERLAY FORM
@@ -428,7 +405,7 @@
       else{list.push({id:Math.max(0,...list.map(x=>x.id))+1,rating:0,svc:0,cust:0,rev:0,...data});toast(`${data.name} added to the team`)}
       closeModal();renderTeam();
       if(!$('panelPerf').classList.contains('hidden'))renderPerf();
-      if(drvId&&wasEditing)openDrawer(drvId);
+      if(drvId&&wasEditing)openDetails(drvId);
       editing=null;
     });
 
@@ -436,11 +413,11 @@
        PERFORMANCE TAB — sortable, paginated table + chart
        ========================================================= */
     const COLS=[
-      ['name','Staff',false,s=>`<div class="flex items-center gap-2.5">${avatar(s,'w-8 h-8 text-xs')}<div class="min-w-0"><p class="font-medium text-slate-800 truncate">${esc(s.name)}</p><p class="text-xs text-slate-500">${s.role}</p></div></div>`],
+      ['name','Staff',false,s=>`<div class="flex items-center gap-2.5">${avatar(s,'w-8 h-8 text-xs')}<div><p class="font-medium text-slate-900">${esc(s.name)}</p><p class="text-xs text-slate-600">${s.role}</p></div></div>`],
       ['svc','Services performed',true,s=>s.svc],
       ['rev','Revenue',true,s=>fmtINR(s.rev)],
       ['cust','Customers',true,s=>s.cust],
-      ['rating','Avg rating',true,s=>s.rating?`<span class="inline-flex items-center gap-1.5">${stars(s.rating)}<span class="text-slate-700">${s.rating.toFixed(1)}</span></span>`:'<span class="text-slate-400">—</span>'],
+      ['rating','Avg rating',true,s=>s.rating?`<span class="inline-flex items-center gap-1.5">${stars(s.rating)}<span class="text-slate-800 font-medium">${s.rating.toFixed(1)}</span></span>`:'<span class="text-slate-500">—</span>'],
       ['commission','Commission earned',true,s=>fmtINR(commissionOf(s))]
     ];
     let sort={key:'rev',dir:'desc'},perfPage=1,perfSize=+$('pgSize').value;
@@ -452,11 +429,13 @@
       a.forEach((p,i)=>{if(i&&p-a[i-1]>1)out.push('…');out.push(p)});return out}
     function renderPager(total){
       const pages=Math.max(1,Math.ceil(total/perfSize)),from=total?(perfPage-1)*perfSize+1:0,to=Math.min(perfPage*perfSize,total);
-      $('pager').innerHTML=`<span class="text-sm text-slate-500">Showing ${from}–${to} of ${total}</span>
-        <div class="flex items-center gap-1.5">
+      $('pager').innerHTML=`<span class="text-sm text-slate-700">Showing <b>${from}–${to}</b> of <b>${total}</b></span>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" class="pg-btn" data-p="1" ${perfPage<=1?'disabled':''} aria-label="First page">«</button>
           <button type="button" class="pg-btn" data-p="${perfPage-1}" ${perfPage<=1?'disabled':''} aria-label="Previous page">‹ Prev</button>
-          ${pageList(perfPage,pages).map(p=>p==='…'?'<span class="px-1 text-slate-400">…</span>':`<button type="button" class="pg-btn ${p===perfPage?'active':''}" data-p="${p}" ${p===perfPage?'aria-current="page"':''}>${p}</button>`).join('')}
+          ${pageList(perfPage,pages).map(p=>p==='…'?'<span class="px-1 text-slate-500">…</span>':`<button type="button" class="pg-btn ${p===perfPage?'active':''}" data-p="${p}" ${p===perfPage?'aria-current="page"':''} aria-label="Page ${p}">${p}</button>`).join('')}
           <button type="button" class="pg-btn" data-p="${perfPage+1}" ${perfPage>=pages?'disabled':''} aria-label="Next page">Next ›</button>
+          <button type="button" class="pg-btn" data-p="${pages}" ${perfPage>=pages?'disabled':''} aria-label="Last page">»</button>
         </div>`;
     }
     $('pager').addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b||b.disabled)return;perfPage=+b.dataset.p;renderPerf()});
@@ -465,18 +444,19 @@
     function renderPerf(){
       $('perfHead').innerHTML=COLS.map(([key,label,num])=>{
         const on=sort.key===key,arrow=on?(sort.dir==='asc'?'▲':'▼'):'↕';
-        return `<th scope="col" aria-sort="${on?(sort.dir==='asc'?'ascending':'descending'):'none'}" class="px-4 py-3 font-semibold ${num?'text-right':'text-left'}">
-          <button type="button" data-sort="${key}" class="inline-flex items-center gap-1 uppercase tracking-wide hover:text-teal-700 ${on?'text-teal-700':''}">${label}<span class="text-[10px] ${on?'':'opacity-40'}">${arrow}</span></button></th>`}).join('');
+        return `<th scope="col" aria-sort="${on?(sort.dir==='asc'?'ascending':'descending'):'none'}" class="px-4 py-3.5 ${num?'text-right':'text-left'}">
+          <button type="button" data-sort="${key}" class="inline-flex items-center gap-1.5 uppercase hover:text-teal-700 ${on?'text-teal-700':''}">${label}<span class="text-[11px] ${on?'':'opacity-60'}">${arrow}</span></button></th>`}).join('');
       const rows=[...list].sort((a,b)=>{
         const x=sortVal(a,sort.key),y=sortVal(b,sort.key);
         const c=typeof x==='string'?x.localeCompare(y):x-y;return sort.dir==='asc'?c:-c});
       const pages=Math.max(1,Math.ceil(rows.length/perfSize));if(perfPage>pages)perfPage=pages;
       const pageRows=rows.slice((perfPage-1)*perfSize,perfPage*perfSize);
-      $('perfBody').innerHTML=pageRows.map(s=>`<tr class="hover:bg-slate-50 cursor-pointer transition-colors" data-id="${s.id}">${COLS.map(([,,num,fn])=>`<td class="px-4 py-3 ${num?'text-right tabular-nums':''} text-slate-700">${fn(s)}</td>`).join('')}</tr>`).join('');
+      $('perfBody').innerHTML=pageRows.map(s=>`<tr class="hover:bg-teal-50/60 cursor-pointer transition-colors" data-id="${s.id}">${COLS.map(([,,num,fn])=>`<td class="px-4 py-3.5 ${num?'text-right tabular-nums':''}">${fn(s)}</td>`).join('')}</tr>`).join('')
+        ||'<tr><td colspan="6" class="px-4 py-8 text-center text-slate-600">No staff to show.</td></tr>';
       const tot=f=>list.reduce((a,s)=>a+f(s),0),rated=list.filter(s=>s.rating);
-      $('perfFoot').innerHTML=`<tr><td class="px-4 py-3">Team total</td><td class="px-4 py-3 text-right tabular-nums">${tot(s=>s.svc)}</td><td class="px-4 py-3 text-right tabular-nums">${fmtINR(tot(s=>s.rev))}</td>
-        <td class="px-4 py-3 text-right tabular-nums">${tot(s=>s.cust)}</td><td class="px-4 py-3 text-right tabular-nums">${rated.length?(rated.reduce((a,s)=>a+s.rating,0)/rated.length).toFixed(1):'—'}</td>
-        <td class="px-4 py-3 text-right tabular-nums">${fmtINR(tot(commissionOf))}</td></tr>`;
+      $('perfFoot').innerHTML=`<tr><td class="px-4 py-3.5">Team total</td><td class="px-4 py-3.5 text-right tabular-nums">${tot(s=>s.svc)}</td><td class="px-4 py-3.5 text-right tabular-nums">${fmtINR(tot(s=>s.rev))}</td>
+        <td class="px-4 py-3.5 text-right tabular-nums">${tot(s=>s.cust)}</td><td class="px-4 py-3.5 text-right tabular-nums">${rated.length?(rated.reduce((a,s)=>a+s.rating,0)/rated.length).toFixed(1):'—'}</td>
+        <td class="px-4 py-3.5 text-right tabular-nums">${fmtINR(tot(commissionOf))}</td></tr>`;
       renderPager(rows.length);
       // Chart shows the whole team in table sort order
       if(perfChart)perfChart.destroy();
@@ -510,7 +490,7 @@
     $('tabPerf').onclick=()=>showTab('perf');
     document.addEventListener('keydown',e=>{
       if(e.key!=='Escape')return;
-      if(!$('modalOv').classList.contains('hidden'))closeModal();else if(drvId)closeDrawer();
+      if(!$('modalOv').classList.contains('hidden'))closeModal();else if(drvId)closeDetails();
     });
 
     showTab('team');renderTeam();

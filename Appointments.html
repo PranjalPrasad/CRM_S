@@ -81,6 +81,12 @@
     const svc=n=>services.find(s=>s.name===n)||{duration:60,price:0};
     appointments.forEach(a=>{const s=svc(a.service);a.duration??=s.duration;a.price??=s.price;a.notes??=''});
     let view='week', date=TODAY, tt;
+    let page=1, perPage=10;                                  // list-view pagination state
+    const pageNums=(p,n)=>{ // e.g. 1 … 4 5 6 … 12
+      const s=new Set([1,n,p-1,p,p+1].filter(x=>x>=1&&x<=n)), out=[]; let last=0;
+      [...s].sort((a,b)=>a-b).forEach(x=>{ if(x-last>1)out.push('…'); out.push(x); last=x });
+      return out;
+    };
     const toast=m=>{const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(tt);tt=setTimeout(()=>t.classList.add('hidden'),2600)};
     const COLOR={Booked:'bg-blue-100 border-blue-500 text-blue-900',Confirmed:'bg-blue-100 border-blue-500 text-blue-900',Completed:'bg-emerald-100 border-emerald-500 text-emerald-900',Cancelled:'bg-rose-100 border-rose-400 text-rose-800 opacity-70','No-show':'bg-slate-200 border-slate-400 text-slate-700'};
     const BADGE={Booked:'badge-new',Confirmed:'badge-new',Completed:'badge-active',Cancelled:'badge-lost','No-show':'badge-inactive'};
@@ -123,9 +129,27 @@
     }
     function listView(){
       const rows=list().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+      const pages=Math.max(1,Math.ceil(rows.length/perPage));
+      page=Math.min(Math.max(1,page),pages);                 // clamp after filters/changes
+      const from=(page-1)*perPage, shown=rows.slice(from,from+perPage);
+      const pb='min-w-8 h-8 px-2 rounded-lg border text-sm transition ';
+      const pager=rows.length?`<div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200 text-sm text-slate-600">
+          <div class="flex items-center gap-2">
+            <span>Showing ${from+1}–${from+shown.length} of ${rows.length}</span>
+            <select id="perPage" class="ml-2 px-2 py-1 rounded-lg border border-slate-300 bg-white" aria-label="Rows per page">
+              ${[10,25,50].map(n=>`<option value="${n}" ${n===perPage?'selected':''}>${n} / page</option>`).join('')}
+            </select>
+          </div>
+          <div class="flex items-center gap-1">
+            <button data-pg="${page-1}" ${page===1?'disabled':''} class="${pb}border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none" aria-label="Previous page">&lsaquo;</button>
+            ${pageNums(page,pages).map(p=>p==='…'
+              ?'<span class="px-1 text-slate-400">…</span>'
+              :`<button data-pg="${p}" class="${pb}${p===page?'bg-teal-600 border-teal-600 text-white font-semibold':'border-slate-300 hover:bg-slate-50'}" ${p===page?'aria-current="page"':''}>${p}</button>`).join('')}
+            <button data-pg="${page+1}" ${page===pages?'disabled':''} class="${pb}border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none" aria-label="Next page">&rsaquo;</button>
+          </div></div>`:'';
       return `<div class="overflow-x-auto"><table class="data-table"><thead><tr>${['Date','Time','Customer','Service','Therapist','Duration','Price','Status'].map((h,i)=>`<th class="${i===6?'ta-r':''}">${h}</th>`).join('')}</tr></thead><tbody>
-        ${rows.map(a=>`<tr data-id="${a.id}" class="cursor-pointer"><td>${fmtDate(a.date)}</td><td>${t12(toMin(a.time))}</td><td class="font-medium text-slate-800">${esc(a.customer)}</td><td>${esc(a.service)}</td><td class="text-slate-500">${esc(a.staff)}</td><td>${a.duration} min</td><td class="ta-r font-semibold text-slate-800">${fmtINR(a.price)}</td><td><span class="badge ${BADGE[a.status]}">${a.status}</span></td></tr>`).join('')
-        ||'<tr><td colspan="8" class="!py-8 text-center text-slate-500">No appointments match these filters.</td></tr>'}</tbody></table></div>`;
+        ${shown.map(a=>`<tr data-id="${a.id}" class="cursor-pointer"><td>${fmtDate(a.date)}</td><td>${t12(toMin(a.time))}</td><td class="font-medium text-slate-800">${esc(a.customer)}</td><td>${esc(a.service)}</td><td class="text-slate-500">${esc(a.staff)}</td><td>${a.duration} min</td><td class="ta-r font-semibold text-slate-800">${fmtINR(a.price)}</td><td><span class="badge ${BADGE[a.status]}">${a.status}</span></td></tr>`).join('')
+        ||'<tr><td colspan="8" class="!py-8 text-center text-slate-500">No appointments match these filters.</td></tr>'}</tbody></table></div>${pager}`;
     }
 
     // ---------- Render ----------
@@ -149,7 +173,7 @@
         .map(([l,v,c])=>`<div class="flex items-center justify-between"><span class="flex items-center gap-2 text-sm text-slate-600"><span class="w-2.5 h-2.5 rounded-full ${c}"></span>${l}</span><span class="text-lg font-bold text-slate-800">${v}</span></div>`).join('');
     }
     $('viewToggle').onclick=e=>{const b=e.target.closest('button');if(b){view=b.dataset.v;render()}};
-    ['fTh','fSvc','fSt'].forEach(i=>$(i).onchange=render);
+    ['fTh','fSvc','fSt'].forEach(i=>$(i).onchange=()=>{page=1;render()});
     const step=n=>{date=addDays(date,n*(view==='week'?7:1));render()};
     $('prev').onclick=()=>step(-1);$('next').onclick=()=>step(1);$('todayBtn').onclick=()=>{date=TODAY;render()};
     $('datePick').onchange=e=>{if(e.target.value){date=e.target.value;render()}};
@@ -241,8 +265,13 @@
         a.status='Cancelled';a.cancelReason=v;closeOv();render();toast('Appointment cancelled')};
     }
 
-    // Clicks: block or list row -> details; empty grid slot -> prefilled booking
+    // Rows-per-page selector (List view)
+    $('view').onchange=e=>{ if(e.target.id==='perPage'){perPage=+e.target.value;page=1;render()} };
+
+    // Clicks: pager -> change page; block or list row -> details; empty grid slot -> prefilled booking
     $('view').onclick=e=>{
+      const pg=e.target.closest('[data-pg]');
+      if(pg){ if(!pg.disabled){page=+pg.dataset.pg;render()} return; }   // must come first
       const b=e.target.closest('[data-id]'); if(b)return details(b.dataset.id);
       const col=e.target.closest('[data-slot]'); if(!col)return;
       const m=Math.min(END-30,START+Math.floor((e.clientY-col.getBoundingClientRect().top)/ROW)*30);

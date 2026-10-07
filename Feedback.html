@@ -37,30 +37,13 @@
     .pg-btn:hover:not(:disabled):not(.active){background:#f1f5f9}
     .pg-btn.active{background:#0d9488;border-color:#0d9488;color:#fff}
     .pg-btn:disabled{opacity:.4;cursor:not-allowed}
-
-    /* Sidebar collapse / expand (desktop) */
-    .app-wrap{transition:padding-left .25s ease}
-    #sbToggle{display:none}
-    @media (min-width:1024px){
-      #app-sidebar > *{transition:transform .25s ease}
-      body.sb-collapsed #app-sidebar > *{transform:translateX(-100%)}
-      body.sb-collapsed .app-wrap{padding-left:0 !important}
-      #sbToggle{display:grid;position:fixed;top:14px;left:calc(16rem - 14px);z-index:60;width:28px;height:28px;place-items:center;border-radius:9999px;background:#fff;border:1px solid #cbd5e1;color:#475569;box-shadow:0 1px 4px rgba(0,0,0,.12);transition:left .25s ease,background .15s}
-      #sbToggle:hover{background:#f1f5f9}
-      #sbToggle svg{transition:transform .25s ease}
-      body.sb-collapsed #sbToggle{left:10px}
-      body.sb-collapsed #sbToggle svg{transform:rotate(180deg)}
-    }
   </style>
 </head>
 <body data-page="feedback" data-title="Feedback & Reviews">
-  <button id="sbToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse / expand sidebar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  </button>
-
   <!-- Shared sidebar + top bar are injected by layout.js -->
   <div id="app-sidebar"></div>
-  <div class="app-wrap lg:pl-64 min-h-screen flex flex-col">
+  <!-- app-shell (not lg:pl-64) so the content follows the sidebar collapse/expand -->
+  <div class="app-shell">
     <div id="app-topbar"></div>
     <main class="flex-1 p-4 lg:p-8 space-y-6">
 
@@ -160,12 +143,9 @@
     const first=n=>String(n).split(' ')[0];
     const F=id=>feedback.find(f=>f.id==id);
 
-    // ---------- Sidebar collapse / expand ----------
-    const tgl=$('sbToggle');
-    const setSb=c=>{document.body.classList.toggle('sb-collapsed',c);tgl.setAttribute('aria-expanded',String(!c));tgl.setAttribute('aria-label',c?'Expand sidebar':'Collapse sidebar');try{localStorage.setItem('sbCollapsed',c?'1':'0')}catch(e){}
-      if(chart)setTimeout(()=>chart.resize(),280)};
-    tgl.onclick=()=>setSb(!document.body.classList.contains('sb-collapsed'));
-    try{if(localStorage.getItem('sbCollapsed')==='1')setSb(true)}catch(e){}
+    // Sidebar collapse/expand is handled by layout.js (hamburger in the top bar).
+    // Only resize the chart when the layout width changes.
+    new MutationObserver(()=>{if(chart)setTimeout(()=>chart.resize(),280)}).observe(document.body,{attributes:true,attributeFilter:['class']});
 
     // ---------- Overlay form helpers ----------
     let ovSubmit=null,lastFocus=null;
