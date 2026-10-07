@@ -7,6 +7,9 @@
   // --- Restore sidebar state (desktop only; CSS ignores it on mobile) ---
   if(localStorage.getItem('sbCollapsed')==='1')document.body.classList.add('sb-collapsed');
 
+  // --- Brand logo (sidebar header). Change this path if your logo file is named / placed differently. ---
+  const LOGO_SRC='assets/img/logo.png';
+
   // --- Navigation config (icon = SVG path inside 24x24 stroke icon) ---
   const NAV=[
    ['dashboard','Dashboard','dashboard.html','M3 12l9-9 9 9M5 10v10h5v-6h4v6h5V10'],
@@ -34,15 +37,15 @@
     `<a href="${n[2]}" title="${n[1]}" class="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-teal-50 hover:text-teal-700 ${n[0]===page?'nav-link-active':''}">${icon(n[3])}<span class="sb-label truncate">${n[1]}</span></a>`).join('');
 
   // --- Sidebar (off-canvas on mobile, fixed + collapsible on lg+) ---
-  // The collapse/expand button lives in the sidebar header, to the right of the "Serenity" heading.
-  // When the sidebar is collapsed (desktop) the logo is hidden and only the toggle (flipped) stays visible.
+  // The header shows the Kunash logo perfectly centered. The collapse/expand button is absolutely
+  // positioned on the right, so it doesn't push the logo off-center.
+  // When the sidebar is collapsed (desktop) the logo is hidden and only the toggle (flipped) stays, centered.
   document.getElementById('app-sidebar').innerHTML=`
    <div id="sb-overlay" class="fixed inset-0 bg-slate-900/40 z-30 hidden lg:hidden"></div>
    <aside id="sb" class="fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200 flex flex-col -translate-x-full lg:translate-x-0 overflow-hidden">
-     <div class="sb-brand h-14 flex items-center gap-3 px-4 border-b border-slate-100 shrink-0 lg:[.sb-collapsed_&]:justify-center lg:[.sb-collapsed_&]:px-0">
-       <div class="w-8 h-8 rounded-lg bg-teal-600 text-white grid place-items-center font-bold shrink-0 lg:[.sb-collapsed_&]:hidden">K</div>
-       <div class="sb-label leading-tight whitespace-nowrap"><p class="font-semibold text-slate-800">Kunash</p><p class="text-xs text-slate-400">Spa &amp; Salon CRM</p></div>
-       <button id="sbToggle" type="button" class="ml-auto p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 shrink-0 lg:[.sb-collapsed_&]:ml-0" aria-label="Collapse sidebar" title="Collapse / expand sidebar">${icon('M11 17l-5-5 5-5M18 17l-5-5 5-5','w-5 h-5 transition-transform duration-200 lg:[.sb-collapsed_&]:rotate-180')}</button>
+     <div class="sb-brand relative h-14 flex items-center justify-center px-3 border-b border-slate-100 shrink-0 lg:[.sb-collapsed_&]:px-0">
+       <img src="${LOGO_SRC}" alt="Kunash" class="sb-logo h-9 w-auto max-w-[140px] object-contain lg:[.sb-collapsed_&]:hidden">
+       <button id="sbToggle" type="button" class="absolute right-3 p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 shrink-0 lg:[.sb-collapsed_&]:static" aria-label="Collapse sidebar" title="Collapse / expand sidebar">${icon('M11 17l-5-5 5-5M18 17l-5-5 5-5','w-5 h-5 transition-transform duration-200 lg:[.sb-collapsed_&]:rotate-180')}</button>
      </div>
      <nav class="flex-1 overflow-y-auto overflow-x-hidden p-2.5 space-y-0.5">${links}</nav>
      <div class="p-3 border-t border-slate-100 shrink-0">
