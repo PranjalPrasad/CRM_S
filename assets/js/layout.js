@@ -15,7 +15,7 @@
    // ['memberships','Memberships','memberships.html','M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 110-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 100-5C13 2 12 7 12 7z'],
    // ['inventory','Inventory','inventory.html','M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v9'],
    ['leads','Leads & Follow-ups','leads.html','M22 12h-4l-3 9L9 3l-3 9H2'],
-   ['campaigns','Marketing & Campaigns','campaigns.html','M3 11v2a1 1 0 001 1h3l5 4V6L7 10H4a1 1 0 00-1 1zM16 8a5 5 0 010 8'],
+  //  ['campaigns','Marketing & Campaigns','campaigns.html','M3 11v2a1 1 0 001 1h3l5 4V6L7 10H4a1 1 0 00-1 1zM16 8a5 5 0 010 8'],
    // ['feedback','Feedback & Reviews','feedback.html','M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z'],
    ['staff','Staff','staff.html','M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8'],
    ['reports','Reports','reports.html','M18 20V10M12 20V4M6 20v-6'],
