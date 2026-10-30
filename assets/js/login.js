@@ -5,27 +5,29 @@
 
   const $=id=>document.getElementById(id);
   const form=$('loginForm'),email=$('email'),pass=$('password');
+  const remember=$('remember'); // null hai kyunki HTML mein checkbox commented hai
 
-  // Prefill remembered email
+  // Prefill remembered email (checkbox ho tabhi tick karo)
   const saved=localStorage.getItem('crmRememberEmail');
-  if(saved){email.value=saved;$('remember').checked=true}
+  if(saved){
+    email.value=saved;
+    if(remember) remember.checked=true;
+  }
 
-  // Show / hide password
-  $('togglePw').onclick=()=>{
-    const show=pass.type==='password';
-    pass.type=show?'text':'password';
-    $('togglePw').textContent=show?'Hide':'Show';
-  };
+  // Show/Hide password login.html ke inline script se handle hota hai
 
-  // Inline error helper: returns true when there is no error
+  // Inline error helper: error na ho to true return karta hai
   function setError(input,msg){
     const el=$(input.id+'Error');
-    el.textContent=msg||'';
-    el.classList.toggle('show',!!msg);
+    if(el){
+      el.textContent=msg||'';
+      el.classList.toggle('show',!!msg);
+    }
     input.classList.toggle('input-invalid',!!msg);
     return !msg;
   }
-  // Clear errors while typing
+
+  // Type karte waqt errors hatao
   [email,pass].forEach(i=>i.addEventListener('input',()=>setError(i,'')));
 
   form.addEventListener('submit',e=>{
@@ -33,16 +35,19 @@
     const ev=email.value.trim();
     let ok=true;
     if(!ev) ok=setError(email,'Enter your email address.')&&ok;
-    else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ev)) ok=setError(email,'Enter a valid email, like name@serenity.in.')&&ok;
+    else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ev)) ok=setError(email,'Enter a valid email, like name@kunash.in.')&&ok;
     if(!pass.value) ok=setError(pass,'Enter your password.')&&ok;
     if(!ok)return;
 
-    // Build a display name from the email (demo only)
+    // Email se display name banao (demo only)
     const name=ev.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-    // Role field removed from the form: everyone logs in as Admin for now.
-    // (layout.js reads user.role for sidebar permissions and the top bar label.)
+
+    // Abhi sab Admin ki tarah login hote hain
     localStorage.setItem('crmUser',JSON.stringify({name,email:ev,role:'Admin'}));
-    if($('remember').checked) localStorage.setItem('crmRememberEmail',ev); else localStorage.removeItem('crmRememberEmail');
+
+    if(remember && remember.checked) localStorage.setItem('crmRememberEmail',ev);
+    else localStorage.removeItem('crmRememberEmail');
+
     location.href='dashboard.html';
   });
 })();

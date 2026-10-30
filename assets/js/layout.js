@@ -21,6 +21,7 @@
    ['reports','Reports','reports.html','M18 20V10M12 20V4M6 20v-6'],
    ['settings','Settings','settings.html','M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 01-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 010-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 014 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 010 4h-.1a1.7 1.7 0 00-1.5 1z']
   ];
+
   // --- Role rules ---
   const HIDE={Receptionist:['reports','settings','staff']};
   const ONLY={Therapist:['dashboard','appointments','customers']};
@@ -36,8 +37,8 @@
    <div id="sb-overlay" class="fixed inset-0 bg-slate-900/40 z-30 hidden lg:hidden"></div>
    <aside id="sb" class="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 flex flex-col -translate-x-full lg:translate-x-0 transition-transform">
      <div class="h-16 flex items-center gap-2 px-5 border-b border-slate-100">
-       <div class="w-9 h-9 rounded-xl bg-teal-600 text-white grid place-items-center font-bold">S</div>
-       <div class="leading-tight"><p class="font-semibold text-slate-800">Serenity</p><p class="text-xs text-slate-400">Spa & Salon CRM</p></div>
+       <div class="w-9 h-9 rounded-xl bg-teal-600 text-white grid place-items-center font-bold">K</div>
+       <div class="leading-tight"><p class="font-semibold text-slate-800">Kunash</p><p class="text-xs text-slate-400">Spa & Salon CRM</p></div>
      </div>
      <nav class="flex-1 overflow-y-auto p-3 space-y-1">${links}</nav>
      <div class="p-3 border-t border-slate-100">
@@ -46,7 +47,7 @@
    </aside>`;
 
   // --- Top bar ---
-  const title=document.body.dataset.title||(NAV.find(n=>n[0]===page)||[0,'Serenity'])[1];
+  const title=document.body.dataset.title||(NAV.find(n=>n[0]===page)||[0,'Kunash'])[1];
   const initials=user.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('app-topbar').innerHTML=`
    <header class="h-16 bg-white/90 backdrop-blur border-b border-slate-200 flex items-center gap-3 px-4 lg:px-8 sticky top-0 z-20">
@@ -69,5 +70,8 @@
   const toggle=o=>{sb.classList.toggle('-translate-x-full',!o);ov.classList.toggle('hidden',!o)};
   document.getElementById('hamburger').onclick=()=>toggle(true);
   ov.onclick=()=>toggle(false);
-  document.getElementById('logoutBtn').onclick=()=>{localStorage.clear();location.href='login.html'};
+  document.getElementById('logoutBtn').onclick=()=>{
+    localStorage.removeItem('crmUser'); // sirf login hatao, remembered email rehne do
+    location.href='login.html';
+  };
 })();
